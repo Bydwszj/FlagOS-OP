@@ -117,7 +117,15 @@ foundation 算子还需要顶层 `route`，除非每个平台条目单独声明 
 
 `python3 scripts/evidence_check.py`（CI `ops-catalog` job）复核上述字段、
 平台状态三方一致（catalog ↔ operator-catalog.md ↔ 生成的 `ops/README.md`）
-以及 `updated`/环境锁日期不晚于当天。
+以及 `updated`/环境锁日期不晚于当天，并交叉复核两项：
+
+- 聚合页 `ops/<算子>/REPORT.md` 里宣称通过的 FlagOS E2E 结果行必须标明
+  具体 profile/环境（`configs/devices/*.yaml` 文件名或环境锁 `name` 之一），
+  P800 的结果不能自动代表 PPU；
+- `configs/env/*.lock.yaml` 的 `evidence[].path` 必须是仓库内当前存在的
+  报告（禁外链、禁占位）；`scope` 行里的 `ops/<算子>` 必须登记在
+  catalog，其中 `ops/<算子> C2` 声明要等于该算子的 `evidence`，并由本锁
+  `evidence` 中该算子的报告支撑。
 
 基础算子当前的实测报告以 `cambricon` profile 的 2026-09-18 历史快照为主；
 没有独立 `mlu590` 报告时，不应把 `mlu590` 写入算子条目的 `profiles`。环境锁的
