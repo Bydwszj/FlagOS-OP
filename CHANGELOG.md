@@ -71,6 +71,21 @@
   A2 插件与内置 backend impl_id 冲突）与 #5 的 XPU1 Xid 补注
 
 ### Changed
+- **证据等级按 profile 记录 + 锁交叉校验收紧（issue #41 审阅落实）**：
+  `ops/catalog.yaml` 以「算子 + profile」为证据记录最小单位
+  （`platforms.<family>.evidence.profiles.<profile>` 记 level/basis/
+  report/consumer/status，顶层 `evidence` 改为派生汇总并由门禁校验），
+  `ops/README.md` 按 profile 展示等级（平台列/证据列均带 profile 明细）；
+  `scripts/evidence_check.py` 新增：锁 `scope` 等级改与**本锁 profile**
+  记录比较（P800 报告不能再给 PPU 的 C2 声明背书，另一环境 C1 也不再
+  被全局 C2 误杀）、结构化 JSON 证据必须声明同 profile 且带通过状态、
+  证据路径统一解析（拒绝对路径/`..` 越界/目录/仓库外 symlink）、
+  REPORT profile 改完整 token 匹配（`demo-10` 不算 `demo-1`，空 profile
+  集不再跳过）；`empty`/`detach_`/`result_type` 按真实消费证据回填为
+  C0（framework 脚本只跑原生 torch 前向、`output_match` 固定返回，
+  不构成 C1），`docs/operator-catalog.md` 同步 C0/C1/C2 口径与未覆盖
+  范围登记；配套阴性/阳性单测（`tests/unit/test_evidence_check.py`
+  43 项 = 原 16 + 新 27）
 - **known-issues #13 / issue #30 跟进（2026-10-27）**: 补 GELU
   `approximate="tanh"` 链接失败的组件归属与修复状态——4.2.1rc0 根因为
   xtriton XPU libdevice 表 fp32 tanh 占位符 `Unsupported`（报错另会被

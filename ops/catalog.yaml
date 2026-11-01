@@ -5,8 +5,14 @@
 # - 规划中的厂商只放在 platform_families；测试和报告合入后再加入算子条目。
 # - 修改本文件后运行 scripts/build_ops_index.py。
 
+# - 证据等级以「算子 + profile」为最小记录单位：platforms.<family>.
+#   evidence.profiles.<profile> 记 level/basis/report（issue #41 审阅），
+#   operator 顶层 evidence 只是这些记录的派生汇总，不能独立填写；
+#   README 按 profile 展示等级，单个 family 下多个 profile 不共享
+#   未区分的等级。
+
 schema: 1
-updated: 2026-10-29
+updated: 2026-11-01
 
 target_scope:
   vendor_family_count: 6
@@ -84,15 +90,35 @@ operators:
       ascend:
         profiles: [ascend910]
         implementation: Triton
+        evidence:
+          profiles:
+            ascend910:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + logits 容差对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
         implementation: 厂商 efficient attention 委托
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + logits 容差对拍
       cambricon:
         profiles: [mlu590]
         implementation: TMO / fused overrideable 委托
+        evidence:
+          profiles:
+            mlu590:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + logits 容差对拍
       thead:
         profiles: [thead-ppu]
         implementation: flash/efficient 分流委托
+        evidence:
+          profiles:
+            thead-ppu:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + logits 容差对拍
 
   - name: sdpa_math
     directory: sdpa_math
@@ -100,20 +126,47 @@ operators:
     purpose: 私有 SDPA math 后端，同时返回完整概率图。
     key_result: 五份实现通过同一组 175 例黄金数据。
     evidence: C2
-    evidence_basis: "p800-kunlunxin-gems5（5.0 栈）真实 vLLM 双跑 2026-10-29，输出逐位一致，embedding 命中 19 / sdpa_math 真实 prefill 消费 8，含概率图与梯度证据（issue #39，见路径）"
+    evidence_basis: "双 C2 profile：p800-kunlunxin-gems5（5.0 栈）真实 vLLM 双跑 2026-10-29，输出逐位一致，embedding 命中 19 / sdpa_math 真实 prefill 消费 8（issue #39，见路径）；thead-ppu-c2（PPU 独立 C2 栈）真实 vLLM EngineCore 经显式 MATH 路径双跑 2026-10-28，status=PASS（见路径）。其余 profile 停在 C1"
     evidence_paths:
       - tests/framework_level/README.md
       - tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json
+      - ops/sdpa_math/reports/e2e_vllm_c2_thead-ppu-c2.json
     platforms:
       ascend:
         profiles: [ascend910]
         implementation: Triton exact-P 路径
+        evidence:
+          profiles:
+            ascend910:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
       kunlunxin:
-        profiles: [p800-kunlunxin]
+        profiles: [p800-kunlunxin, p800-kunlunxin-gems5]
         implementation: vendor O/LSE 加 exact-P 重建
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
+            p800-kunlunxin-gems5:
+              level: C2
+              basis: 真实 vLLM 双跑 2026-10-29（random-qwen3-tiny），输出逐位一致，sdpa_math 真实 prefill 消费 8
+              consumer: vllm
+              report: tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json
       thead:
-        profiles: [thead-ppu]
+        profiles: [thead-ppu, thead-ppu-c2]
         implementation: flash/efficient 分流 O/LSE 加 exact-P 重建
+        evidence:
+          profiles:
+            thead-ppu:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
+            thead-ppu-c2:
+              level: C2
+              basis: 真实 vLLM EngineCore 双跑 2026-10-28，token 与 MATH 基线一致（hits=20）
+              consumer: vllm-enginecore
+              status: PASS
+              report: ops/sdpa_math/reports/e2e_vllm_c2_thead-ppu-c2.json
 
   - name: embedding
     directory: embedding
@@ -121,20 +174,47 @@ operators:
     purpose: 稠密 embedding 前向和 dense backward。
     key_result: 已在三个当前厂商平台交付；MLU/PPU 侧具备逐位覆盖，Ascend 结果保留为历史实验。
     evidence: C2
-    evidence_basis: "p800-kunlunxin-gems5（5.0 栈）真实 vLLM 双跑 2026-10-29，输出逐位一致，embedding 命中 19 / sdpa_math 真实 prefill 消费 8，含概率图与梯度证据（issue #39，见路径）"
+    evidence_basis: "双 C2 profile：p800-kunlunxin-gems5（5.0 栈）真实 vLLM 双跑 2026-10-29，输出逐位一致，embedding 命中 19 / sdpa_math 真实 prefill 消费 8（issue #39，见路径）；thead-ppu-c2（PPU 独立 C2 栈）真实 vLLM EngineCore 消费 aten::embedding 双跑 2026-10-28，status=PASS（见路径）。其余 profile 停在 C1"
     evidence_paths:
       - tests/framework_level/README.md
       - tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json
+      - ops/embedding/reports/e2e_vllm_c2_thead-ppu-c2.json
     platforms:
       kunlunxin:
-        profiles: [p800-kunlunxin]
+        profiles: [p800-kunlunxin, p800-kunlunxin-gems5]
         implementation: 原生 row-gather 与反向补偿
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
+            p800-kunlunxin-gems5:
+              level: C2
+              basis: 真实 vLLM 双跑 2026-10-29（random-qwen3-tiny），输出逐位一致，embedding 命中 19
+              consumer: vllm
+              report: tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json
       cambricon:
         profiles: [cambricon]
         implementation: 原生 index_select 与 embedding_backward 委托
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
       thead:
-        profiles: [thead-ppu]
+        profiles: [thead-ppu, thead-ppu-c2]
         implementation: 原生 index_select 与 embedding_backward 委托
+        evidence:
+          profiles:
+            thead-ppu:
+              level: C1
+              basis: framework_level 基线/注入双跑，mini-decoder 消费 + 输出对拍
+            thead-ppu-c2:
+              level: C2
+              basis: 真实 vLLM EngineCore 双跑 2026-10-28，token 与基线一致（hits=10）
+              consumer: vllm-enginecore
+              status: PASS
+              report: ops/embedding/reports/e2e_vllm_c2_thead-ppu-c2.json
 
   - name: type_as
     directory: type_as
@@ -146,8 +226,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 .type_as 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 .type_as 并对拍
 
   - name: clone
     directory: clone
@@ -159,8 +249,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 clone 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 clone 并对拍
 
   - name: contiguous
     directory: contiguous
@@ -175,8 +275,20 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 contiguous 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C2
+              basis: P800 4.2 真实 vLLM 基线/注入双跑 2026-10-26，输出 token 逐位一致（框架级 README §P800）
+              consumer: vllm
+              report: tests/framework_level/README.md
 
   - name: copy_
     directory: copy_
@@ -188,8 +300,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 copy_ 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 copy_ 并对拍
 
   - name: dropout
     directory: dropout
@@ -201,8 +323,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 dropout 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 dropout 并对拍
 
   - name: detach
     directory: detach
@@ -214,8 +346,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 detach 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 detach 并对拍
 
   - name: detach_
     directory: detach_
@@ -223,12 +365,22 @@ operators:
     purpose: 在基础算子族中保留原地 detach 语义。
     route: experimental · torch
     key_result: 按设计不可 A1 注册，保持 NotImplementedError。
-    evidence: C1
+    evidence: C0
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
 
   - name: empty_like
     directory: empty_like
@@ -243,8 +395,20 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 empty_like 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C2
+              basis: P800 4.2 真实 vLLM 基线/注入双跑 2026-10-26，输出 token 逐位一致（框架级 README §P800）
+              consumer: vllm
+              report: tests/framework_level/README.md
 
   - name: empty
     directory: empty
@@ -252,12 +416,22 @@ operators:
     purpose: 按 size 分配未初始化 tensor。
     route: experimental · torch
     key_result: 不注册，避免与 empty_strided 递归；元数据黄金 48/48。
-    evidence: C1
+    evidence: C0
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
 
   - name: empty_strided
     directory: empty_strided
@@ -272,8 +446,20 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 empty_strided 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C2
+              basis: P800 4.2 真实 vLLM 基线/注入双跑 2026-10-26，输出 token 逐位一致（框架级 README §P800）
+              consumer: vllm
+              report: tests/framework_level/README.md
 
   - name: result_type
     directory: result_type
@@ -281,12 +467,22 @@ operators:
     purpose: 计算两个输入的 PyTorch dtype 提升结果。
     route: experimental · torch
     key_result: 纯元数据函数；按设计不可 A1 注册。
-    evidence: C1
+    evidence: C0
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C0
+              basis: 仅契约/直调范围——framework 脚本只跑原生 torch 前向，未消费仓库目标实现、无基线/实现对拍（output_match 固定返回），按 docs/testing.md 停在 C0
 
   - name: item
     directory: item
@@ -298,8 +494,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 item 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 item 并对拍
 
   - name: _local_scalar_dense
     directory: _local_scalar_dense
@@ -311,8 +517,18 @@ operators:
     platforms:
       cambricon:
         profiles: [cambricon]
+        evidence:
+          profiles:
+            cambricon:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 _local_scalar_dense 并对拍
       kunlunxin:
         profiles: [p800-kunlunxin]
+        evidence:
+          profiles:
+            p800-kunlunxin:
+              level: C1
+              basis: framework_level 基线/注入双跑，应用式前向消费 _local_scalar_dense 并对拍
 
 registration_contracts:
   cambricon-foundation:

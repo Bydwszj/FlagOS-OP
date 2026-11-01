@@ -3,11 +3,19 @@
 
 检查六件事（任何一条失败即非零退出）：
 
-1. `ops/catalog.yaml` 每个算子必须声明 `evidence: C0|C1|C2`；
-   `C1`/`C2` 要求 `ops/<dir>/test/framework_level.py` 存在。
-2. `C2` 必须给出 `evidence_basis`（一句范围诚实的说明）与
-   `evidence_paths`（仓库内文件列表），且每个路径真实存在——
-   证据声明必须锁到具体文件，防止只写结论不给产物。
+1. `ops/catalog.yaml` 每个算子必须声明 `evidence: C0|C1|C2`，且该汇总
+   必须等于各 `platforms.<family>.evidence.profiles` 记录的最高等级
+   ——**算子 + profile 是证据记录的最小单位**，汇总只能由记录派生；
+   `platforms.<family>.profiles` 里的每个 profile 都要有独立记录
+   （单个 family 下多个 profile 不共享未区分的等级）；C1/C2 记录
+   必须给 `basis`（consumer 证据范围）。`framework_level.py` 存在
+   只是结构前提，不单独构成 C1（详见 docs/operator-catalog.md）。
+2. `C2` 必须给出 `evidence_basis` 与 `evidence_paths`；所有证据路径
+   经统一解析函数核验：禁外链、禁绝对路径、`resolve()` 后必须仍在
+   仓库根内、必须是文件（目录、`..` 越界、仓库外 symlink 均拒绝）。
+   C2 记录的 `report` 必须列入 `evidence_paths`；结构化 JSON 报告
+   必须声明相同 `profile` 并给出通过状态（`status`/`ok`），不能拿
+   别的环境的报告给本 profile 背书。
 3. 平台状态三方一致：`ops/catalog.yaml` 的 platform_families 状态
    ↔ `docs/operator-catalog.md` 状态表 ↔ 生成的 `ops/README.md`
    行（README 的两份生成口径由 `build_ops_index.py --check` 兜底，
@@ -15,12 +23,16 @@
 4. 日期字段（catalog `updated`、环境锁 `collected_at` /
    `hardware_collected_at`）必须是合法 `YYYY-MM-DD` 且不晚于今天。
 5. 聚合报告 `ops/*/REPORT.md` 中宣称通过的 FlagOS E2E 结果行必须
-   标明具体 profile/环境（`configs/devices` 已知 profile 之一）——
-   P800 的结果不能自动代表 PPU。
-6. 环境锁 `configs/env/*.lock.yaml`：`evidence` 条目必须给出仓库内
-   且当前存在的报告路径（禁占位/外链）；`scope` 行里的
-   `ops/<算子> C[012]` 声明必须与 catalog 的 `evidence` 等级一致，
-   且该锁 `evidence` 中要有该算子的报告支撑。
+   出现已知 profile 的**完整 token**（边界匹配：`demo-10` /
+   `NOT-demo-1-invalid` 都不算 `demo-1`）；已知 profile 集为空时，
+   存在成功声明即报错——P800 的结果不能自动代表 PPU。
+6. 环境锁 `configs/env/*.lock.yaml`：`evidence[].path` 用同一路径
+   解析函数核验（禁占位/外链/越界）；锁 `name` 必须是
+   `configs/devices` 已知 profile，且结构化证据声明的 `profile`
+   必须与锁一致（P800 报告不能给 PPU 的 C2 声明背书）；`scope`
+   行的 `ops/<算子> C[012]` 必须等于**该锁 profile** 的记录等级
+   （而不是 operator 全局汇总），C2 声明还须由本锁中声明了该
+   profile 的报告支撑。
 
 用法::
 
@@ -30,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import json
 import re
 import sys
 from pathlib import Path
@@ -49,6 +62,13 @@ _SCOPE_OP = re.compile(r"ops/(?P<op>[A-Za-z0-9_]+)")
 _SCOPE_OP_LEVEL = re.compile(
     r"ops/(?P<op>[A-Za-z0-9_]+)\s+(?P<level>C[012])(?![A-Za-z0-9_])")
 _EVIDENCE_OP_PATH = re.compile(r"^ops/(?P<op>[A-Za-z0-9_]+)/")
+_PATH_ERR = {
+    "外链": "必须是仓库内路径，不允许外链 {rel}",
+    "绝对路径": "必须是仓库内相对路径，不允许绝对路径 {rel}",
+    "越界": "越出仓库根目录 {rel}",
+    "目录": "必须是文件，不能是目录 {rel}",
+    "不存在": "不存在: {rel}",
+}
 
 
 def _parse_date(value) -> _dt.date | None:
@@ -62,6 +82,156 @@ def _parse_date(value) -> _dt.date | None:
         return _dt.date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _resolve_repo_file(
+        root: Path, rel: str) -> tuple[Path | None, str | None, str | None]:
+    """统一的仓库内证据路径解析。
+
+    返回 ``(绝对路径, 规范化仓库相对路径, 错误类别)``。拒绝外链、
+    绝对路径、逃出 repo root 的 `..` 越界与外部 symlink、目录；
+    成功时给出规范化相对路径，供算子归属与跨引用基于同一字符串。
+    """
+    if not isinstance(rel, str) or not rel.strip():
+        return None, None, "不存在"
+    rel = rel.strip()
+    if "://" in rel:
+        return None, None, "外链"
+    p = Path(rel)
+    if p.is_absolute():
+        return None, None, "绝对路径"
+    try:
+        resolved = (root / p).resolve()
+    except OSError:
+        return None, None, "越界"
+    root_res = root.resolve()
+    try:
+        norm = resolved.relative_to(root_res).as_posix()
+    except ValueError:
+        return None, None, "越界"
+    if resolved.is_dir():
+        return None, None, "目录"
+    if not resolved.is_file():
+        return None, None, "不存在"
+    return resolved, norm, None
+
+
+def _path_error(kind: str, rel: str) -> str:
+    return _PATH_ERR[kind].format(rel=rel)
+
+
+def _token_in(line: str, token: str) -> bool:
+    """完整 token 边界匹配。
+
+    边界字符为 `[A-Za-z0-9-]`：`demo-10`、`NOT-demo-1-invalid`、
+    `p800-kunlunxin-gems5` 里的 `p800-kunlunxin` 都不算命中；
+    `_`/`.`/`/` 等分隔符后出现的完整 profile 名（如文件名
+    `e2e_flagos_p800-kunlunxin.json` 内嵌的 profile）算命中。
+    """
+    return re.search(
+        rf"(?<![A-Za-z0-9-]){re.escape(token)}(?![A-Za-z0-9-])",
+        line) is not None
+
+
+def _device_profiles(root: Path) -> set[str]:
+    """`configs/devices/*.yaml` 的 profile 名（`_template` 除外）。"""
+    names: set[str] = set()
+    devices = root / "configs" / "devices"
+    if devices.is_dir():
+        for path in devices.glob("*.yaml"):
+            if not path.stem.startswith("_"):
+                names.add(path.stem)
+    return names
+
+
+def _known_profiles(root: Path) -> set[str]:
+    """已知 profile / 环境名。
+
+    来源两处：`configs/devices/*.yaml`（`_template` 除外）与
+    `configs/env/*.lock.yaml` 的 `name`——报告标 profile 时只能用
+    这套机器可读的名字，写「P800」这类泛称不算数。
+    """
+    names = _device_profiles(root)
+    env_dir = root / "configs" / "env"
+    if env_dir.is_dir():
+        for path in sorted(env_dir.glob("*.lock.yaml")):
+            try:
+                lock = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except yaml.YAMLError:
+                continue
+            name = lock.get("name") if isinstance(lock, dict) else None
+            if isinstance(name, str) and name:
+                names.add(name)
+    return names
+
+
+def _profile_family_map(catalog: dict) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for family, meta in catalog.get("platform_families", {}).items():
+        if not isinstance(meta, dict):
+            continue
+        for profile in meta.get("current_profiles") or []:
+            mapping[profile] = family
+    return mapping
+
+
+def _report_declares_profile(
+        root: Path, resolved: Path, norm: str, profile: str,
+        record: dict, where: str) -> list[str]:
+    """结构化证据报告必须声明同一 profile/consumer/status。
+
+    JSON：核对 `profile` 字段与通过状态（`status`/`ok`），记录里
+    声明的 `consumer`/`status` 与报告一致；其他文本报告（md 等）：
+    要求正文出现该 profile 的完整 token。避免要求程序理解任意
+    自然语言，判定只走结构化字段或 token。
+    """
+    errors: list[str] = []
+    if norm.endswith(".json"):
+        try:
+            data = json.loads(resolved.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+            return [f"{where}: JSON 解析失败 {exc}"]
+        if not isinstance(data, dict):
+            return [f"{where}: JSON 顶层不是映射"]
+        declared = data.get("profile")
+        if not isinstance(declared, str) or not declared:
+            errors.append(f"{where}: 报告缺少 profile 字段")
+        elif declared != profile:
+            errors.append(
+                f"{where}: 报告声明 profile={declared} 与记录 "
+                f"profile={profile} 不一致")
+        status = data.get("status")
+        if isinstance(status, str):
+            if status.upper() not in ("PASS", "OK"):
+                errors.append(f"{where}: 报告验证状态非通过: {status!r}")
+        elif data.get("ok") is True:
+            pass
+        else:
+            errors.append(f"{where}: 报告缺少 status/ok 验证状态字段")
+        want_status = record.get("status")
+        if isinstance(want_status, str) and isinstance(status, str):
+            if want_status.upper() != status.upper():
+                errors.append(
+                    f"{where}: 记录 status={want_status!r} 与报告 "
+                    f"status={status!r} 不一致")
+        want_consumer = record.get("consumer")
+        if isinstance(want_consumer, str) and want_consumer:
+            declared_consumer = (
+                data.get("consumer_type") or data.get("consumer")
+                or data.get("engine"))
+            if declared_consumer is not None and \
+                    str(declared_consumer) != want_consumer:
+                errors.append(
+                    f"{where}: 报告 consumer={declared_consumer!r} 与记录 "
+                    f"consumer={want_consumer!r} 不一致")
+    else:
+        try:
+            text = resolved.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return [f"{where}: 无法读取 {exc}"]
+        if not _token_in(text, profile):
+            errors.append(f"{where}: 报告正文未出现 profile {profile} 标记")
+    return errors
 
 
 def _load_locks(root: Path, errors: list[str]) -> list[tuple[Path, dict]]:
@@ -119,26 +289,123 @@ def _check_evidence(root: Path, catalog: dict, errors: list[str]) -> None:
             errors.append(
                 f"operator {name}: evidence={level} 但缺少 "
                 f"ops/{directory}/test/framework_level.py")
-        if level == "C2":
-            basis = op.get("evidence_basis")
-            if not isinstance(basis, str) or not basis.strip():
-                errors.append(f"operator {name}: C2 必须提供 evidence_basis")
-            paths = op.get("evidence_paths")
-            if not isinstance(paths, list) or not paths:
-                errors.append(f"operator {name}: C2 必须提供 evidence_paths")
+
+        # ── 按 profile 的证据记录（最小单位：算子 + profile）──
+        records: dict[str, dict] = {}
+        platforms = op.get("platforms")
+        if not isinstance(platforms, dict):
+            errors.append(f"operator {name}: platforms 不是映射")
+            platforms = {}
+        for family, platform in platforms.items():
+            if not isinstance(platform, dict):
                 continue
-            for rel in paths:
-                if not isinstance(rel, str) or not rel:
-                    errors.append(f"operator {name}: evidence_paths 含非法项 {rel!r}")
-                    continue
-                if rel.startswith(("http://", "https://")):
+            declared = platform.get("profiles") or []
+            evidence = platform.get("evidence")
+            if not isinstance(evidence, dict) or \
+                    not isinstance(evidence.get("profiles"), dict):
+                errors.append(
+                    f"operator {name}/{family}: 缺 evidence.profiles "
+                    f"按 profile 的证据记录（每个已交付 profile 必须"
+                    f"有独立 level/basis）")
+                continue
+            fam_levels: dict[str, str] = {}
+            for profile in declared:
+                record = evidence["profiles"].get(profile)
+                if not isinstance(record, dict):
                     errors.append(
-                        f"operator {name}: evidence_paths 必须是仓库内路径，"
-                        f"不允许外链 {rel}")
+                        f"operator {name}/{family}: profile {profile} "
+                        f"缺独立证据记录")
                     continue
-                if not (root / rel).exists():
+                rlevel = record.get("level")
+                if rlevel not in VALID_EVIDENCE:
                     errors.append(
-                        f"operator {name}: evidence_paths 不存在: {rel}")
+                        f"operator {name}: profile {profile} 记录 level "
+                        f"必须是 {VALID_EVIDENCE}，当前 {rlevel!r}")
+                    continue
+                if rlevel in ("C1", "C2") and not (
+                        isinstance(record.get("basis"), str)
+                        and record["basis"].strip()):
+                    errors.append(
+                        f"operator {name}: profile {profile} {rlevel} 记录"
+                        f"必须提供 basis（consumer 证据范围；仅存在 "
+                        f"framework 文件不构成 C1）")
+                if rlevel == "C2":
+                    report = record.get("report")
+                    if not isinstance(report, str) or not report.strip():
+                        errors.append(
+                            f"operator {name}: profile {profile} C2 记录"
+                            f"必须提供 report")
+                    else:
+                        resolved, norm, kind = _resolve_repo_file(root, report)
+                        if kind is not None:
+                            errors.append(
+                                f"operator {name}: profile {profile} C2 "
+                                f"report {_path_error(kind, report)}")
+                        else:
+                            errors.extend(_report_declares_profile(
+                                root, resolved, norm, profile, record,
+                                where=f"operator {name}: profile {profile} "
+                                      f"C2 report {norm}"))
+                records[profile] = record
+                fam_levels[profile] = rlevel
+            family_level = evidence.get("level")
+            if isinstance(family_level, str):
+                # PR44 兼容的家族汇总字段：只能由 profile 记录派生。
+                derived = max(fam_levels, key=lambda p: VALID_EVIDENCE.index(
+                    fam_levels[p])) if fam_levels else None
+                if derived is None or family_level != fam_levels[derived]:
+                    errors.append(
+                        f"operator {name}/{family}: evidence.level="
+                        f"{family_level} 与 profile 记录最高级 "
+                        f"{fam_levels.get(derived) if derived else '—'} "
+                        f"不一致（家族汇总必须由记录派生）")
+
+        if records:
+            derived_top = max(
+                records, key=lambda p: VALID_EVIDENCE.index(
+                    records[p]["level"]))
+            top = records[derived_top]["level"]
+            if top != level:
+                errors.append(
+                    f"operator {name}: evidence={level} 与 profile 记录"
+                    f"最高级 {top} 不一致（operator 顶层汇总只能由"
+                    f"记录派生，不能独立填写）")
+        else:
+            errors.append(
+                f"operator {name}: 没有任何 profile 证据记录"
+                f"（platforms.<family>.evidence.profiles）")
+
+        if level != "C2":
+            continue
+
+        # ── C2 顶层：basis + evidence_paths（统一路径解析）──
+        basis = op.get("evidence_basis")
+        if not isinstance(basis, str) or not basis.strip():
+            errors.append(f"operator {name}: C2 必须提供 evidence_basis")
+        paths = op.get("evidence_paths")
+        if not isinstance(paths, list) or not paths:
+            errors.append(f"operator {name}: C2 必须提供 evidence_paths")
+            continue
+        path_norms: set[str] = set()
+        for rel in paths:
+            if not isinstance(rel, str) or not rel:
+                errors.append(f"operator {name}: evidence_paths 含非法项 {rel!r}")
+                continue
+            resolved, norm, kind = _resolve_repo_file(root, rel)
+            if kind is not None:
+                errors.append(
+                    f"operator {name}: evidence_paths {_path_error(kind, rel)}")
+                continue
+            path_norms.add(norm)
+        for profile, record in records.items():
+            if record.get("level") == "C2" and \
+                    isinstance(record.get("report"), str):
+                _, norm, kind = _resolve_repo_file(root, record["report"])
+                if kind is None and norm not in path_norms:
+                    errors.append(
+                        f"operator {name}: profile {profile} 的 C2 report "
+                        f"{norm} 未列入 evidence_paths（报告路径必须与"
+                        f"记录同源）")
 
 
 def _guide_family_statuses(root: Path, errors: list[str]) -> dict[str, str]:
@@ -197,45 +464,19 @@ def _check_family_consistency(root: Path, catalog: dict,
             errors.append(f"ops/README.md 缺少状态行: {row}")
 
 
-def _known_profiles(root: Path) -> set[str]:
-    """已知 profile / 环境名。
-
-    来源两处：`configs/devices/*.yaml`（`_template` 除外）与
-    `configs/env/*.lock.yaml` 的 `name`——报告标 profile 时只能用
-    这套机器可读的名字，写「P800」这类泛称不算数。
-    """
-    names: set[str] = set()
-    devices = root / "configs" / "devices"
-    if devices.is_dir():
-        for path in devices.glob("*.yaml"):
-            if not path.stem.startswith("_"):
-                names.add(path.stem)
-    env_dir = root / "configs" / "env"
-    if env_dir.is_dir():
-        for path in sorted(env_dir.glob("*.lock.yaml")):
-            try:
-                lock = yaml.safe_load(path.read_text(encoding="utf-8"))
-            except yaml.YAMLError:
-                continue
-            name = lock.get("name") if isinstance(lock, dict) else None
-            if isinstance(name, str) and name:
-                names.add(name)
-    return names
-
-
 def _check_report_e2e_profiles(root: Path, errors: list[str]) -> None:
     """缺口 1：聚合报告里的 FlagOS E2E 结果必须标明具体 profile。
 
     只看 `ops/*/REPORT.md`（一页看全的聚合页）。同一行里既宣称通过
-    （☑/PASS/通过…）又报 FlagOS E2E 结果的，必须出现已知 profile；
-    纯叙述、纯数字、标 ✗ 的行不在此列。
+    （☑/PASS/通过…）又报 FlagOS E2E 结果的，必须出现已知 profile 的
+    **完整 token**（边界匹配，`demo-10` 不算 `demo-1`）；纯叙述、
+    纯数字、标 ✗ 的行不在此列。已知 profile 集为空时，成功声明无法
+    核验，直接报错而不是跳过。
     """
     ops_dir = root / "ops"
     if not ops_dir.is_dir():
         return
     profiles = _known_profiles(root)
-    if not profiles:
-        return
     for report in sorted(ops_dir.glob("*/REPORT.md")):
         rel = report.relative_to(root)
         text = report.read_text(encoding="utf-8", errors="replace")
@@ -246,33 +487,64 @@ def _check_report_e2e_profiles(root: Path, errors: list[str]) -> None:
                 continue
             if any(mark in line for mark in _FAILURE_MARKS):
                 continue
-            if any(profile in line for profile in profiles):
-                continue
-            errors.append(
-                f"{rel}:{lineno}: FlagOS E2E 结果行未标明具体 profile/"
-                f"环境（需含 configs/devices 已知 profile 之一，"
-                f"如 {sorted(profiles)[0]}）")
+            if profiles:
+                if any(_token_in(line, profile) for profile in profiles):
+                    continue
+                errors.append(
+                    f"{rel}:{lineno}: FlagOS E2E 结果行未标明具体 profile/"
+                    f"环境（需含 configs/devices 已知 profile 之一，"
+                    f"如 {sorted(profiles)[0]}；子串近似名不算）")
+            else:
+                errors.append(
+                    f"{rel}:{lineno}: 存在宣称通过的 FlagOS E2E 结果行，"
+                    f"但已知 profile 集为空（configs/devices/*.yaml 与"
+                    f"环境锁 name 均无），无法核验")
+
+
+def _lock_support_declares_profile(
+        root: Path, norm: str, profile: str) -> bool:
+    """本锁某算子的支撑文件是否声明了给定 profile。"""
+    resolved = root / norm
+    if norm.endswith(".json"):
+        try:
+            data = json.loads(resolved.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            return False
+        return isinstance(data, dict) and data.get("profile") == profile
+    try:
+        text = resolved.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return _token_in(text, profile)
 
 
 def _check_lock_crossref(root: Path, catalog: dict,
                          locks: list[tuple[Path, dict]],
                          errors: list[str]) -> None:
-    """缺口 2：环境锁 evidence/scope 与 catalog evidence 的交叉引用。
+    """缺口 2：环境锁 evidence/scope 与 catalog 按 profile 记录的交叉引用。
 
-    - `evidence[].path` 必须是仓库内、当前存在的报告（禁外链/占位）；
-      指向 `ops/<dir>/...` 时该算子必须在 catalog 登记；
+    - `evidence[].path` 必须经统一解析（仓库内、当前存在的文件，
+      禁外链/占位/绝对路径/越界/目录）；结构化 JSON 证据声明的
+      `profile` 必须与锁 `name` 一致（P800 报告不能给 PPU 背书）；
+      指向 `ops/<dir>/...` 时按**规范化路径**做算子归属核对；
     - `scope` 行里的 `ops/<dir>` 必须是 catalog 登记的算子；
-    - `scope` 行声明 `ops/<dir> C[012]` 时，必须等于 catalog 的
-      `evidence`，且本锁 `evidence` 里要有该算子的报告作为支撑。
+    - `scope` 行声明 `ops/<dir> C[012]` 时，锁 `name` 必须是
+      `configs/devices` 已知 profile，且声明必须等于**该 profile**
+      的记录等级（而非 operator 全局汇总），本锁 `evidence` 中要有
+      该算子的报告支撑；C2 声明的支撑报告还必须声明该 profile。
     """
     ops_by_dir: dict[str, dict] = {}
     for op in catalog.get("operators", []):
         name = op.get("name", "?")
         ops_by_dir[op.get("directory", name)] = op
+    profile_family = _profile_family_map(catalog)
+    device_profiles = _device_profiles(root)
 
     for lock_path, lock in locks:
         rel = lock_path.relative_to(root)
+        lock_name = lock.get("name")
         referenced: set[str] = set()
+        supporting: dict[str, list[str]] = {}
 
         entries = lock.get("evidence", [])
         if not isinstance(entries, list):
@@ -287,19 +559,41 @@ def _check_lock_crossref(root: Path, catalog: dict,
             if not isinstance(path, str) or not path.strip():
                 errors.append(f"{rel}: evidence 缺 path（占位证据）")
                 continue
-            if path.startswith(("http://", "https://")):
+            if path.startswith(("http://", "https://")) or "://" in path:
                 errors.append(f"{rel}: evidence 必须是仓库内路径，"
                               f"不允许外链 {path}")
                 continue
-            if not (root / path).is_file():
-                errors.append(f"{rel}: evidence 指向不存在的报告 {path}")
+            resolved, norm, kind = _resolve_repo_file(root, path)
+            if kind is not None:
+                if kind == "不存在":
+                    errors.append(
+                        f"{rel}: evidence 指向不存在的报告 {path}")
+                else:
+                    errors.append(
+                        f"{rel}: evidence {_path_error(kind, path)}")
                 continue
-            m = _EVIDENCE_OP_PATH.match(path)
+            if norm.endswith(".json"):
+                try:
+                    data = json.loads(
+                        resolved.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                    data = None
+                if isinstance(data, dict):
+                    declared = data.get("profile")
+                    if isinstance(declared, str) and declared and \
+                            isinstance(lock_name, str) and \
+                            declared != lock_name:
+                        errors.append(
+                            f"{rel}: evidence {norm} 声明 "
+                            f"profile={declared} 与锁 profile="
+                            f"{lock_name} 不一致（不能跨环境背书）")
+            m = _EVIDENCE_OP_PATH.match(norm)
             if not m:
                 continue
             op_name = m.group("op")
             if op_name in ops_by_dir:
                 referenced.add(op_name)
+                supporting.setdefault(op_name, []).append(norm)
             else:
                 errors.append(
                     f"{rel}: evidence 引用 catalog 没有登记的算子 "
@@ -325,15 +619,46 @@ def _check_lock_crossref(root: Path, catalog: dict,
             op_name, claimed = m.group("op"), m.group("level")
             if op_name not in ops_by_dir:
                 continue  # 未登记已由上面报过
-            actual = ops_by_dir[op_name].get("evidence")
+            if not isinstance(lock_name, str) or \
+                    lock_name not in device_profiles:
+                errors.append(
+                    f"{rel}: 锁 name={lock_name!r} 不是 configs/devices "
+                    f"已知 profile，无法核对 ops/{op_name} 的 scope 等级"
+                    f"声明（证据必须绑定具体 profile）")
+                continue
+            family = profile_family.get(lock_name)
+            record = None
+            if family is not None:
+                platform = ops_by_dir[op_name].get("platforms")
+                if isinstance(platform, dict) and \
+                        isinstance(platform.get(family), dict):
+                    evidence = platform[family].get("evidence")
+                    if isinstance(evidence, dict) and \
+                            isinstance(evidence.get("profiles"), dict):
+                        record = evidence["profiles"].get(lock_name)
+            if not isinstance(record, dict) or "level" not in record:
+                errors.append(
+                    f"{rel}: catalog 在 profile {lock_name} 上没有 "
+                    f"ops/{op_name} 的证据记录，scope 声明无据")
+                continue
+            actual = record["level"]
             if actual != claimed:
                 errors.append(
                     f"{rel}: scope 声明 ops/{op_name} {claimed} 与 "
-                    f"catalog evidence={actual} 不一致")
-            if op_name not in referenced:
+                    f"profile {lock_name} 记录 {actual} 不一致"
+                    f"（比较对象是本锁 profile 的记录，不是 operator "
+                    f"全局汇总）")
+            if op_name not in supporting:
                 errors.append(
                     f"{rel}: scope 的 ops/{op_name} {claimed} 声明在本锁 "
                     f"evidence 中没有对应报告支撑")
+            elif claimed == "C2" and not any(
+                    _lock_support_declares_profile(root, norm, lock_name)
+                    for norm in supporting[op_name]):
+                errors.append(
+                    f"{rel}: scope 的 ops/{op_name} C2 声明在本锁 "
+                    f"evidence 中没有对应报告支撑"
+                    f"（需声明 profile {lock_name}）")
 
 
 def check(root: Path) -> list[str]:

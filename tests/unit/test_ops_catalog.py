@@ -54,6 +54,20 @@ def test_generated_ops_index_is_current():
     assert OUTPUT_PATH.read_text() == render_index(catalog)
 
 
+def test_generated_ops_index_shows_profile_scoped_evidence():
+    """README 按 profile 展示证据等级，不显示无范围的全局 C2。"""
+    catalog = load_catalog()
+    text = render_index(catalog)
+    # embedding：gems5/thead-ppu-c2 的 C2 与旧环境的 C1 分开标注
+    assert "p800-kunlunxin-gems5 C2" in text
+    assert "thead-ppu-c2 C2" in text
+    assert "p800-kunlunxin C1" in text
+    # 证据列给出按 profile 的明细，而不是单独一个无范围 C2
+    assert "C2（p800-kunlunxin-gems5 · thead-ppu-c2）" in text
+    # 按真实 consumer 证据回填后，empty/detach_/result_type 停在 C0
+    assert "C0（cambricon · p800-kunlunxin）" in text
+
+
 def test_foundation_route_may_come_from_every_platform_entry():
     catalog = deepcopy(load_catalog())
     foundation = next(

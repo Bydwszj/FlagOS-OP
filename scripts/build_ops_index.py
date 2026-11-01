@@ -177,6 +177,57 @@ def _operator_link(op: dict) -> str:
     return f"[{op['name']}]({op['directory']}/)"
 
 
+def _profile_level(op: dict, family: str, profile: str) -> str | None:
+    """算子在指定 family/profile 上的证据等级（无记录时 None）。"""
+    platform = (op.get("platforms") or {}).get(family)
+    if not isinstance(platform, dict):
+        return None
+    evidence = platform.get("evidence")
+    if not isinstance(evidence, dict):
+        return None
+    profiles = evidence.get("profiles")
+    if not isinstance(profiles, dict):
+        return None
+    record = profiles.get(profile)
+    if isinstance(record, dict) and record.get("level") in ("C0", "C1", "C2"):
+        return record["level"]
+    return None
+
+
+def _profile_labels(op: dict, family: str, profiles: list) -> list[str]:
+    labels = []
+    for profile in profiles:
+        level = _profile_level(op, family, profile)
+        labels.append(f"{profile} {level}" if level else str(profile))
+    return labels
+
+
+def _evidence_cell(op: dict) -> str:
+    """证据列：顶层汇总 + 按 profile 的等级明细（按 profile 展示）。"""
+    top = op.get("evidence") or "—"
+    by_level: dict[str, list[str]] = {}
+    ordered: list[tuple[str, str]] = []
+    for family, platform in (op.get("platforms") or {}).items():
+        if not isinstance(platform, dict):
+            continue
+        for profile in platform.get("profiles") or []:
+            level = _profile_level(op, family, profile)
+            if level is None:
+                continue
+            ordered.append((level, profile))
+            by_level.setdefault(level, []).append(profile)
+    if not ordered:
+        return top
+    if set(by_level) == {top}:
+        return f"{top}（{' · '.join(p for _, p in ordered)}）"
+    segs = [
+        f"{level}（{' · '.join(by_level[level])}）"
+        for level in sorted(
+            by_level, key=lambda lv: -("C0", "C1", "C2").index(lv))
+    ]
+    return " / ".join(segs)
+
+
 def _platform_summary(catalog: dict) -> list[str]:
     counts = Counter(
         family
@@ -210,12 +261,12 @@ def _core_rows(catalog: dict) -> list[str]:
             continue
         platforms = " · ".join(
             f"{families[family]['display_name']}"
-            f"（{' / '.join(platform['profiles'])}）"
+            f"（{' / '.join(_profile_labels(op, family, platform['profiles']))}）"
             for family, platform in op["platforms"].items()
         )
         rows.append(
             f"| {_operator_link(op)} | {op['purpose']} | {platforms} | "
-            f"{op.get('evidence') or '—'} | {op['key_result']} |"
+            f"{_evidence_cell(op)} | {op['key_result']} |"
         )
     return rows
 
@@ -233,7 +284,7 @@ def _foundation_rows(catalog: dict, group: str) -> list[str]:
         route = " / ".join(routes) or "—"
         rows.append(
             f"| {_operator_link(op)} | {op['purpose']} | {route} | "
-            f"{op.get('evidence') or '—'} | {op['key_result']} |"
+            f"{_evidence_cell(op)} | {op['key_result']} |"
         )
     return rows
 
@@ -368,6 +419,9 @@ def render_index(catalog: dict) -> str:
         "- **多平台算子**必须维护 `PLATFORM.md`；涉及平台合并流程时维护 `MERGE.md`。",
         "- **平台结论限定范围**：dtype、shape、dispatch key、运行时版本和",
         "  fallback 边界写在同一份证据链里。",
+        "- **证据等级按 profile 记录**：`platforms.<family>.evidence.profiles`",
+        "  是证据的最小单位（level/basis/report），顶层 `evidence` 只是这些",
+        "  记录的派生汇总；单个 family 下多个 profile 不共享未区分的等级。",
         "- **包态导入**统一使用 `from ops.<operator> import register_a1`；脚本态",
         "  仅作为单算子目录内运行的兼容模式。",
         "- CI 的 `ops-packaging` 是 CPU 包入口扫描；`ops/test_packaging.py` 是",

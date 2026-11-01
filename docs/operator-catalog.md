@@ -93,39 +93,65 @@ directory: <ops 子目录>
 group: <分组 key>
 purpose: <面向读者的一句话作用>
 key_result: <有证据支撑的简短结果>
-evidence: C0 | C1 | C2
-evidence_basis: <仅 C2：一句范围诚实的说明（平台/日期/消费点）>
+evidence: C0 | C1 | C2          # 汇总，必须等于 profile 记录的最高等级（派生，不能独立填写）
+evidence_basis: <仅顶层 C2：一句范围诚实的说明（平台/日期/消费点）>
 evidence_paths:
-  - <仅 C2：仓库内证据文件路径，至少一项>
+  - <仅顶层 C2：仓库内证据文件路径，至少一项；C2 记录的 report 必须在列>
 platforms:
   <family-key>:
     profiles: [<已交付 profile>]
     implementation: <实现摘要>
+    evidence:
+      profiles:
+        <profile>:
+          level: C0 | C1 | C2   # 算子 + profile 是证据记录的最小单位
+          basis: <C1/C2 必填：consumer 证据范围>
+          report: <C2 必填：仓库内结构化证据报告>
+          consumer: <可选：consumer/engine 标识，与结构化报告核对>
+          status: <可选：验证状态，与结构化报告核对>
 ```
 
 foundation 算子还需要顶层 `route`，除非每个平台条目单独声明 `route`。
 算子里的 platform 条目表示已交付声明，必须由该算子的测试和报告支撑。
 
-`evidence` 声明证据等级（定义见 [docs/testing.md](testing.md) 证据等级）：
+证据等级定义见 [docs/testing.md](testing.md) 证据等级，本目录的口径：
 
-- **C0**：无 consumer 证据。
-- **C1**：具备 `ops/<directory>/test/framework_level.py`（黄金 + mini consumer 或单测层）。
-- **C2**：真实引擎端到端调用与输出结论——必须同时给出
-  `evidence_basis` 与仓库内 `evidence_paths`，路径不存在即 CI 失败，
-  防止只写结论不给产物。C2 只按已实测消费点的算子标注；
-  「注册进引擎但未被调用」停在 C1。
+- **C0**：契约/直调范围——接口、数值语义或注册契约满足；无 consumer
+  证据。只跑原生 torch 前向、`output_match` 固定返回、未消费仓库目标
+  实现的脚本停在这一级。
+- **C1**：有最小 consumer 证据——`ops/<directory>/test/framework_level.py`
+  里基线/注入双跑或 mini-consumer 对拍，证明目标消费者能调用仓库实现
+  并完成局部输出比对。**文件存在只是结构前提，不单独构成 C1**。
+- **C2**：真实引擎端到端调用与输出结论——必须给出
+  `evidence_basis`、仓库内 `evidence_paths`，并按 profile 记录
+  `report`（结构化 JSON 报告须声明相同 `profile` 与通过状态）。
+  C2 只按已实测消费点的 profile 标注；「注册进引擎但未被调用」
+  停在 C1。
+
+`evidence`（operator 顶层）是各 `platforms.<family>.evidence.profiles`
+记录的**派生汇总**（最高等级），门禁校验二者一致；单个 family 下多个
+profile（如 `thead-ppu` 与 `thead-ppu-c2`、`p800-kunlunxin` 与
+`p800-kunlunxin-gems5`）必须各自有独立记录，不共享未区分的等级。
+`ops/README.md` 按 profile 展示等级（平台列与证据列均带 profile 明细）。
 
 `python3 scripts/evidence_check.py`（CI `ops-catalog` job）复核上述字段、
 平台状态三方一致（catalog ↔ operator-catalog.md ↔ 生成的 `ops/README.md`）
-以及 `updated`/环境锁日期不晚于当天，并交叉复核两项：
+以及 `updated`/环境锁日期不晚于当天，并交叉复核：
 
-- 聚合页 `ops/<算子>/REPORT.md` 里宣称通过的 FlagOS E2E 结果行必须标明
-  具体 profile/环境（`configs/devices/*.yaml` 文件名或环境锁 `name` 之一），
-  P800 的结果不能自动代表 PPU；
+- 聚合页 `ops/<算子>/REPORT.md` 里宣称通过的 FlagOS E2E 结果行必须出现
+  已知 profile 的**完整 token**（边界匹配：`demo-10`、`NOT-demo-1-invalid`
+  都不算 `demo-1`；文件名内嵌的完整 profile 名算命中）；已知 profile 集
+  为空时存在成功声明即报错——P800 的结果不能自动代表 PPU；
+- 所有证据路径（catalog `evidence_paths`/`report`、环境锁
+  `evidence[].path`）经统一解析：禁外链、禁绝对路径、`resolve()` 后必须
+  仍在仓库根内、必须是文件（目录、`..` 越界、仓库外 symlink 均拒绝），
+  算子归属基于规范化后的仓库相对路径；
 - `configs/env/*.lock.yaml` 的 `evidence[].path` 必须是仓库内当前存在的
-  报告（禁外链、禁占位）；`scope` 行里的 `ops/<算子>` 必须登记在
-  catalog，其中 `ops/<算子> C2` 声明要等于该算子的 `evidence`，并由本锁
-  `evidence` 中该算子的报告支撑。
+  报告（禁外链、禁占位），结构化 JSON 证据声明的 `profile` 必须与锁
+  `name` 一致（P800 报告不能给 PPU 的 C2 声明背书）；`scope` 行里的
+  `ops/<算子>` 必须登记在 catalog，`ops/<算子> C[012]` 声明必须等于
+  **该锁 profile** 记录的等级（而不是 operator 全局汇总），并由本锁
+  `evidence` 中该算子的报告支撑——C2 声明的支撑报告还必须声明该 profile。
 
 基础算子当前的实测报告以 `cambricon` profile 的 2026-09-18 历史快照为主；
 没有独立 `mlu590` 报告时，不应把 `mlu590` 写入算子条目的 `profiles`。环境锁的
@@ -144,13 +170,32 @@ ops/<operator>/MERGE.md
 无关代码。未来新增契约时应记录 canonical key、兼容 key、可注册算子数、
 不可注册算子和实现约束。
 
+## 已知未覆盖范围（issue #41 跟踪，勿把门禁 OK 写成全部完成）
+
+证据门禁当前**有意不覆盖**以下内容，处理方式在此登记，避免把脚本返回
+OK 表述成 #41 验收范围全部闭环：
+
+1. `ops/sdpa_math/reports/development.md` 的 `| FlagOS E2E | ☑ PASS | … |`
+   分册行未标 profile——门禁只扫聚合页 `ops/*/REPORT.md`；补齐需要先补
+   该行的真实环境数据，属 ops 报告数据改动，单独跟踪。
+2. `ops/sdpa_math/REPORT.md` 关键数字表里的 E2E 性能倍率行（无成功标记、
+   无 profile）——口径是「宣称通过的 E2E 结果行必须标 profile」，纯数字
+   行不在其列；若收紧到「所有 E2E 行必标 profile」需同步补这两行数据。
+3. 日期门禁只检查格式合法与不晚于当天，**不判定** stale roadmap/历史结论
+   失效；历史证据可以保留，但不能冒充当前环境结论——该内容检查需要逐页
+   人工复核，作为 #41 后续项而不是脚本规则。
+4. REPORT E2E 行出现 profile token 只是第一层；该行结论与 catalog 按
+   profile 记录的证据范围是否一致，由 catalog 记录 + 环境锁交叉校验
+   兜底，脚本不解析任意自然语言叙述。
+
 ## 新增算子
 
 1. 从 `templates/operator/` 复制并完成算子目录。
 2. 通过 kernel、op、framework/application 三层测试。
 3. 补齐 golden 与性能证据。
-4. 在 `ops/catalog.yaml` 的 `operators` 中登记，并回填 `evidence`
-   （C2 需 `evidence_basis` + `evidence_paths`）。
+4. 在 `ops/catalog.yaml` 的 `operators` 中登记算子、按 profile 回填
+   `platforms.<family>.evidence.profiles`（顶层 `evidence` 汇总随记录
+   派生；C2 需 `evidence_basis` + `evidence_paths` + 记录 `report`）。
 5. 运行 `python3 scripts/build_ops_index.py`。
 6. 确认 `python3 scripts/build_ops_index.py --check` 通过。
 7. 确认 `python3 scripts/evidence_check.py` 通过。
