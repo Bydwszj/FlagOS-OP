@@ -3,12 +3,16 @@
 > **职责与证据等级**：本页是当前验证矩阵；`README.md` 负责使用入口，
 > `PLATFORM.md` 负责平台绑定，`reports/` 保存带日期的实验和原始数据。
 > 当前为 Ascend910/P800/thead-ppu 三个硬件交付，CPU 仅作 ATen 对照。FlagOS E2E 使用
-> mini-LLM harness（C1），不等同于真实 vLLM。**C2（vLLM-Ascend）已实测**:
-> 2026-10-31 同路径三跑 @ `1dc1d8c`、EngineCore 真实前向命中 math 后端
+> mini-LLM harness（C1），不等同于真实 vLLM。**C2（vLLM-Ascend，profile
+> `ascend910-c2-vllm`）已实测**: 2026-10-31 同路径三跑 @ `1dc1d8c`、
+> EngineCore 真实前向命中 math 后端
 > 2880 次（correctness/warmup/measured 阶段分解），`baseline = 同 MATH 路径
 > 无 A1` 的 C1 恒等 6/6 位级一致、prompt logprob max|Δ|=0.17 nats（<0.5
-> 失效线）、性能门禁 inject/baseline_math 中位数比 1.06 OK——
+> 失效线）、性能门禁 inject/baseline_math 中位数比 1.06 OK（相对原生
+> 注意力 1.2876，描述性）——
 > **验收状态 complete-pending-review（待审阅，不写「C2 成立」）**，
+> 2026-11-01 判定器修复后离线重判仍 exit 0
+> （[reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)），
 > 详见 [reports/c2_ascend910.md](reports/c2_ascend910.md)。
 > 与 native 路径的输出差异为路径差（数值精度差），按预注册口径记录
 > （5/6 描述性对照、teacher-forced prompt logprob、首分歧位置），

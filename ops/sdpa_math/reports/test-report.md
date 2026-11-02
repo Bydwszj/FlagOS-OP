@@ -3,8 +3,8 @@
 | 项 | 值 |
 |---|---|
 | 算子名称 / 路线 / 级别 | `aten::_scaled_dot_product_attention_math` / **A1** / Triton（NPU）+ P800 fast（P800）+ thead fast（thead-ppu）+ torch（CPU/fallback） |
-| 目标设备 / 测试日期 | `ascend910` · `p800-kunlunxin` · `thead-ppu` · `cpu` / 2026-09-30~10-02 · C2 补测 10-28 · thead 接入 10-24 · C2 复测 10-30/31 |
-| 结论 | **通过（Must 清单全勾）**；应用证据按 profile 拆分见 §6——p800 FlagOS E2E ☑、thead C1 ☑、thead-ppu-c2 真实 vLLM C2 ☑（#37）；**Ascend910 C2：c2-hit（验收状态 complete-pending-review（待审阅）**——同路径三跑 C1 恒等 6/6、性能门禁 1.06 OK，见 [c2_ascend910.md](c2_ascend910.md)，待 #38 审阅闭环，未审阅前不写「C2 验收通过」） |
+| 目标设备 / 测试日期 | `ascend910` · `p800-kunlunxin` · `thead-ppu` · `cpu` / 2026-09-30~10-02 · C2 补测 10-28 · thead 接入 10-24 · C2 复测 10-30/31 · 验收判定器二轮复审 11-01（离线重判） |
+| 结论 | **通过（Must 清单全勾）**；应用证据按 profile 拆分见 §6——p800 FlagOS E2E ☑、thead C1 ☑、thead-ppu-c2 真实 vLLM C2 ☑（#37）；**Ascend910 C2（profile `ascend910-c2-vllm`）：c2-hit（验收状态 complete-pending-review（待审阅）**——同路径三跑 C1 恒等 6/6、性能门禁 1.06 OK，2026-11-01 判定器修复后离线重判仍 exit 0（[c2_ascend910/acceptance_redecide.json](c2_ascend910/acceptance_redecide.json)），见 [c2_ascend910.md](c2_ascend910.md)，待 #38 审阅闭环，未审阅前不写「C2 验收通过」） |
 
 ## 1. 测试范围
 
@@ -21,7 +21,7 @@
 | FlagOS E2E（C1，p800-kunlunxin） | ☑ | `script/e2e_flagos.py` | PASS：4 层 mini-LLM / 前向 / 反向 / 生成 / 概率图熵正则（§4.1） |
 | FlagOS E2E（thead-ppu） | ✗ | `script/e2e_flagos.py` | 缺证：dev 栈无 flag_gems，结构性缺证（同 T1/T2，跟踪 #37） |
 | **C2 真实引擎（thead-ppu-c2）** | ☑ | `script/e2e_vllm_c2.py --model ... --model-impl transformers` | PASS：EngineCore 内 MATH 路径 A1 命中 20；token 与同路径基线一致（[e2e_vllm_c2_thead-ppu-c2.json](e2e_vllm_c2_thead-ppu-c2.json)、[thead-ppu-c2.md](thead-ppu-c2.md)） |
-| **C2 真实引擎（ascend910）** | ☑ | `script/c2_real_vllm_ascend.py --mode accept` | **c2-hit（验收状态 complete-pending-review（待审阅））**（2026-10-31 复跑 @ `1dc1d8c`）：三跑 OK、accept 退出码 0；EngineCore 真实前向 forward_hits=**2880**（correctness 1440 + warmup 240 + measured 1200，阶段归因自洽）+ 主进程 probe 1 独立列示；**同路径（baseline_math vs inject）C1 恒等 6/6 位级一致**、prompt logprob max\|Δ\|=0.170 / mean=0.022 nats（93 token，<0.5 失效线）、性能门禁 inject/baseline_math 中位数比 1.06 OK；native 路径差 5/6 描述性单列。旧版（10-28）无引擎侧补丁为 routing boundary、hits=0。见 [c2_ascend910.md](c2_ascend910.md) |
+| **C2 真实引擎（profile `ascend910-c2-vllm`）** | ☑ | `script/c2_real_vllm_ascend.py --mode accept --profile ascend910-c2-vllm` | **c2-hit（验收状态 complete-pending-review（待审阅））**（2026-10-31 复跑 @ `1dc1d8c`；2026-11-01 判定器修复后离线重判仍 exit 0）：三跑 OK、accept 退出码 0；EngineCore 真实前向 forward_hits=**2880**（correctness 1440 + warmup 240 + measured 1200，阶段归因自洽）+ 主进程 probe 1 独立列示；**同路径（baseline_math vs inject）C1 恒等 6/6 位级一致**、prompt logprob max\|Δ\|=0.170 / mean=0.022 nats（93 token，<0.5 失效线）、性能门禁 inject/baseline_math 中位数比 1.06 OK；native 路径差 5/6 描述性单列。旧版（10-28）无引擎侧补丁为 routing boundary、hits=0。见 [c2_ascend910.md](c2_ascend910.md) |
 | 一键 | ☑ | `python3 example.py [ascend910\|cpu\|p800-kunlunxin\|thead-ppu]` | 三层全绿 |
 
 ## 2. 环境

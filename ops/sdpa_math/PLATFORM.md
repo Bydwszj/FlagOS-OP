@@ -23,7 +23,10 @@
 - 与 sdpa 全量版的关系：本算子是 `_scaled_dot_product_math` 的
   exact-P 分解路线；形状路由建议沿用 sdpa `kernel/auto_dispatch.py`
   的截流范式（大 S 走原生）
-- **C2（vLLM-Ascend）**（issue #38，2026-10-31 复跑 @ `1dc1d8c`）:
+- **C2（vLLM-Ascend，profile `ascend910-c2-vllm`）**（issue #38，
+  2026-10-31 复跑 @ `1dc1d8c`；2026-11-01 判定器修复后离线重判
+  仍 `complete-pending-review` / exit 0，见
+  [reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)）:
   **c2-hit / complete-pending-review（待审阅，不写「C2 成立」）**——
   引擎侧 `FLAGOS_SDPA_MATH_ATTN=1` 补丁
   `NPUPlatform.get_attn_backend_cls` 返回 `FlagOSMathAttentionBackend` 后，

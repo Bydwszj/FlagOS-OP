@@ -21,9 +21,12 @@
 | 三层测试、性能脚本 | `test/`、`script/`（`EMBEDDING_PROFILE` 切平台） |
 | A1 autograd.Function 包装 | `register.py`（`_BACKENDS` 选择器 + `_DEVICE_PROBE` 守卫） |
 
-## 2. ascend910 绑定（C2 已登记，C0/C1 为历史实验）
+## 2. ascend910 绑定（C2 归属 profile `ascend910-c2-vllm`，C0/C1 为历史实验）
 
-> **C2 证据（issue #38，2026-10-31 复跑 @ `1dc1d8c`）**：真实 vLLM-Ascend
+> **C2 证据（issue #38，2026-10-31 复跑 @ `1dc1d8c`，profile
+> `ascend910-c2-vllm`；2026-11-01 判定器修复后离线重判仍
+> complete-pending-review / exit 0，见
+> [reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)）**：真实 vLLM-Ascend
 > 双跑，EngineCore 前向命中 `aten::embedding` **97 次** = 1 次引擎初始化
 > dummy/profile 前向（`skip_attn`，仍执行 embed_tokens）+ 48 次 correctness
 > 前向（6 prompt × 8）+ 8 次 warmup + 40 次 measured（阶段归因自洽），
@@ -31,7 +34,8 @@
 > 性能门禁 inject/baseline 中位数比 0.94 OK，主进程/辅助进程 0 命中
 > （按 pid 角色标注，防串算）；验收状态 complete-pending-review（待审阅）。
 > 见 [reports/c2_ascend910.md](reports/c2_ascend910.md)。
-> 下表绑定结论来自 2026-09-30 的 C0/C1 实验，移植时逐项重验。
+> 下表绑定结论来自 2026-09-30 的 C0/C1 实验（dev profile `ascend910`
+> 历史范围），移植时逐项重验。
 
 | 绑定项 | 实测结论 |
 |---|---|

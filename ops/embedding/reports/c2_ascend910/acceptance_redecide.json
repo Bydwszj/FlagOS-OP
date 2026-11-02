@@ -1,0 +1,272 @@
+{
+  "schema": 1,
+  "kind": "c2-acceptance-redecide",
+  "date": "2026-11-02T08:17:29Z",
+  "mode": "accept",
+  "raw_material": {
+    "summary_path": "ops/embedding/reports/c2_ascend910/summary.json",
+    "summary_sha256": "fd6863d0f95ee7ccc3b214cdd6e6925b3b917003b7f76fc882c6605d8933cd24",
+    "run_id": "20261031T013206Z-2663709",
+    "collection_commit": "1dc1d8c12da9b6ff7d4b2b409bd6dddc97443a43",
+    "collection_date": "2026-10-31T01:33:51Z",
+    "profile_field_original": "ascend910",
+    "preserved_unmodified": true,
+    "rerun_npu": false,
+    "rerun_reason": "采集协议（执行/注入/计数落盘）未变；复审确认原实测未触发假通过漏洞，仅判定器修复 → 离线重判（复审指引）"
+  },
+  "redecide": {
+    "commit": "bd624430e1d0534b96d16d567c162a9505a94437",
+    "correctness_key": "correctness",
+    "correctness": {
+      "applicable": true,
+      "evidence_complete": true,
+      "evidence_errors": [],
+      "evidence_policy": "预期 prompt 集非空；两跑完整、唯一覆盖预期 prompt_idx；prompt 身份一致；每项 token_ids 有效且非空；缺失/重复/错配直接 FAIL（不进入数值比较）",
+      "criterion_predeclared": {
+        "C1_identity": "baseline vs inject 逐 prompt 生成前缀完全一致（6/6 prompt，位级）",
+        "C2_custom_min": "前 2 token 一致率 ≥ 0.667（≥4/6 prompt）",
+        "policy": "未过 C1 但过 C2 → INCONCLUSIVE（补首分歧/中间张量/logits 排查）；两皆未过 → FAIL；不得事后放宽阈值（docs/testing.md#assertions）"
+      },
+      "per_prompt": [
+        {
+          "prompt_idx": 0,
+          "prompt": "The capital of France is",
+          "baseline_token_ids": [
+            260,
+            2240,
+            282,
+            7042,
+            30,
+            657,
+            314,
+            260
+          ],
+          "inject_token_ids": [
+            260,
+            2240,
+            282,
+            7042,
+            30,
+            657,
+            314,
+            260
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        },
+        {
+          "prompt_idx": 1,
+          "prompt": "def fibonacci(n):\n    if n < 2:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nprint(fibonacci(10)) #",
+          "baseline_token_ids": [
+            216,
+            33,
+            32,
+            198,
+            3272,
+            24,
+            38572,
+            46477
+          ],
+          "inject_token_ids": [
+            216,
+            33,
+            32,
+            198,
+            3272,
+            24,
+            38572,
+            46477
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        },
+        {
+          "prompt_idx": 2,
+          "prompt": "Once upon a time, in a land far away, there lived a",
+          "baseline_token_ids": [
+            9357,
+            1573,
+            23142,
+            3365,
+            492,
+            764,
+            519,
+            30
+          ],
+          "inject_token_ids": [
+            9357,
+            1573,
+            23142,
+            3365,
+            492,
+            764,
+            519,
+            30
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        },
+        {
+          "prompt_idx": 3,
+          "prompt": "Water boils at 100 degrees",
+          "baseline_token_ids": [
+            20590,
+            28,
+            284,
+            260,
+            913,
+            36411,
+            418,
+            216
+          ],
+          "inject_token_ids": [
+            20590,
+            28,
+            284,
+            260,
+            913,
+            36411,
+            418,
+            216
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        },
+        {
+          "prompt_idx": 4,
+          "prompt": "2 + 2 = 4, 3 + 3 =",
+          "baseline_token_ids": [
+            216,
+            38,
+            28,
+            216,
+            34,
+            1232,
+            216,
+            34
+          ],
+          "inject_token_ids": [
+            216,
+            38,
+            28,
+            216,
+            34,
+            1232,
+            216,
+            34
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        },
+        {
+          "prompt_idx": 5,
+          "prompt": "The quick brown fox jumps over the lazy dog. The quick brown fox",
+          "baseline_token_ids": [
+            27003,
+            690,
+            260,
+            23790,
+            2767,
+            30,
+            198,
+            198
+          ],
+          "inject_token_ids": [
+            27003,
+            690,
+            260,
+            23790,
+            2767,
+            30,
+            198,
+            198
+          ],
+          "common_prefix_len": 8,
+          "first_divergence_token_index": null,
+          "bitwise_equal": true,
+          "first2_equal": true
+        }
+      ],
+      "identity_pass": true,
+      "identity_pass_count": "6/6",
+      "first2_match_rate": 1.0,
+      "first2_match": "6/6",
+      "custom_min_pass": true,
+      "correctness_verdict": "PASS",
+      "prompt_logprob_same_path": {
+        "prompts_compared": 6,
+        "tokens": 93,
+        "max_abs_diff": 0.0,
+        "mean_abs_diff": 0.0,
+        "per_prompt": {
+          "0": {
+            "tokens": 4,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          },
+          "1": {
+            "tokens": 43,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          },
+          "2": {
+            "tokens": 13,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          },
+          "3": {
+            "tokens": 7,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          },
+          "4": {
+            "tokens": 13,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          },
+          "5": {
+            "tokens": 13,
+            "max_abs_diff": 0.0,
+            "mean_abs_diff": 0.0
+          }
+        }
+      }
+    },
+    "decision": {
+      "mode": "accept",
+      "collection_status": "completed",
+      "acceptance_status": "complete-pending-review",
+      "failed_checks": [],
+      "warnings": [],
+      "exit_code": 0,
+      "required_runs": [
+        "baseline",
+        "inject"
+      ]
+    },
+    "acceptance_status": "complete-pending-review",
+    "exit_code": 0
+  },
+  "corrections": [
+    {
+      "field": "profile",
+      "was": "ascend910",
+      "now": "ascend910-c2-vllm",
+      "reason": "旧 harness 硬编码 ascend910（dev profile）；本次真实验证环境为 ascend910-c2-vllm（复审意见 3）"
+    }
+  ],
+  "notes": [
+    "派生结果，不替代原始 summary.json；两者并存可追溯。",
+    "acceptance.status 与 acceptance_decision 由同一次 decide 派生。"
+  ]
+}

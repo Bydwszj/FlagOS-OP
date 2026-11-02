@@ -12,6 +12,7 @@
 | run_id | `20261031T012918Z-2603520` |
 | commit | `1dc1d8c`（`summary.commit` == 证据产出提交，见 [c2_ascend910/summary.json](c2_ascend910/summary.json)） |
 | **验收状态** | `complete-pending-review`（同路径验收必需项全过、待审阅；**不写「C2 成立/验收通过」**——#38 意见 6） |
+| 二轮复审处置 | 2026-11-01 判定器修复后**离线重判**（原始材料未动、未复跑 NPU）——见 [c2_ascend910/acceptance_redecide.json](c2_ascend910/acceptance_redecide.json) 与 §10 |
 
 ## 1. 命令（可复现）
 
@@ -19,7 +20,8 @@
 cd /root/FlagOS-OP
 python3 ops/sdpa_math/script/c2_real_vllm_ascend.py \
   --out ops/sdpa_math/reports/c2_ascend910
-# 默认 --mode accept: 命中/正确性/性能门禁/归因任一未过 → exit ≠ 0
+# 默认 --mode accept: 命中/阶段命中/证据完整性/正确性/性能/归因任一未过 → exit ≠ 0
+# 默认 --profile ascend910-c2-vllm（缺对应环境锁直接 exit 2）
 # --mode collect: 显式采集模式（采集完成 exit 0，不代表验收通过）
 ```
 
@@ -118,6 +120,9 @@ stale=0），角色按 pid/ppid 判定，阶段按 hit_times 落入窗口归因�
 正确性 C1 恒等 PASS；③ logprob 失效线 ≤0.5 nats；④ 同路径性能门禁
 `OK`；⑤ 计数归因自洽。**`rc/ok` 仅表示采集成功，不等于验收通过**；
 collect 模式的退出码语义在 summary 与文档中显式标注。
+二轮复审（§10）在此之上追加 ⑥ 输入证据完整性 `evidence_complete`
+与 ⑦ engine correctness/measured **阶段命中**两项必需项，本记录经
+离线重判后仍全部通过（`acceptance_redecide.json`）。
 
 ## 6. 性能（意见 4/7）
 
@@ -134,6 +139,11 @@ collect 模式的退出码语义在 summary 与文档中显式标注。
 baseline_math 0.2745s / inject 0.2919s。同步口径如实记录
 （`llm.generate` 同步阻塞，前向在 EngineCore 子进程，主进程无法对
 引擎 `torch.npu.synchronize()`，三组同构——见 summary.perf.sync_note）。
+
+**口径提醒（复审要求保留）**: 门禁比 1.0634 只是 **inject / baseline_math
+（同 MATH 路径）**；inject / baseline（相对原生 `npu_fusion_attention`
+注意力的整体时延比）为 **1.2876**，仅描述性、不入门禁——不得把
+1.0634 解读成“引擎整体只增加 6.34%”。
 
 **计数落盘 I/O 干扰的发现与处置（如实披露）**: 首轮复跑（2026-10-30，
 run_id `20261030T032536Z-3886431`）每次命中全量重写计数文件，落盘
@@ -180,3 +190,44 @@ run_id `20261030T032536Z-3886431`）每次命中全量重写计数文件，落�
   集 + 阶段归因（2880 = correctness+warmup+measured）+ 性能门禁 +
   验收取口（accept/collect 模式）+ attention 几何修复回归。旧 run_id
   命中文件全部剔除（stale=0 残留）。
+
+## 10. 二轮复审处置（2026-11-01，PR #44 comment 6559530331）
+
+复审在 `04c2229` 上用纯 Python 复现了两条**验收器假通过路径**
+（复审明确: 现有实测材料**未触发**这两条漏洞，硬件结果不因此无效）：
+
+| 复审条目 | 处置 | 证据 |
+|---|---|---|
+| 1 [P1] 双方缺失输出 → `[] == []` 计成“6/6 PASS” | `correctness_compare` 前置 `_validate_evidence`（预期集非空 / 两跑完整唯一覆盖 prompt_idx / 身份对应 / token 非空；缺失·重复·错配直接 FAIL，不进入数值比较）；`decide` 强制 `evidence_complete=True` | 代码 `ops/sdpa_math/script/c2_real_vllm_ascend.py`；负例 `tests/unit/test_c2_evidence_phase.py`（**实际调用 harness 比较函数**，含双方空输出/空 token/缺 prompt/空预期集 + 合法短输出正例） |
+| 2 [P1] `forward_hits` 取生命周期累计，仅 init 命中也过 | 去掉主进程累计回退；`decide` 新增必需项: engine/worker **correctness 阶段命中 > 0**（支撑正确性）与 **measured 阶段命中 > 0**（支撑性能）；init/warmup/probe/outside 独立保留；`hit_attribution`/`hit_attribution_check` 缺失不放行 | 同上；负例用**真实 `attribute_hits()`** 构造 init-only / probe-only / outside-only / correctness 有命中但 measured 为零，全部 accept 非零 |
+| 2 附带 status 矛盾 | `acceptance.status` 与 `acceptance_decision` 由同一次 `decide` 同源派生 | harness main（先判定、后写 status） |
+| 3 [P2] profile 误标 / catalog 共用 C2 | harness `--profile`（默认 `ascend910-c2-vllm`）+ 缺环境锁 exit 2；summary 落 `profile`/`env_lock`；catalog evidence 改逐 profile 列表，C2 只归属 `ascend910-c2-vllm`，`ascend910` 保留历史范围；README 按 `level@profile·status` 展示 | `ops/catalog.yaml`、`scripts/build_ops_index.py`、`ops/README.md` |
+
+**离线重判（复审指引: 保留原始测量材料，另存派生结果）**:
+
+- 原始 [c2_ascend910/summary.json](c2_ascend910/summary.json)（run_id
+  `20261031T012918Z-2603520`，采集 commit `1dc1d8c`）**未改动**，
+  sha256 记录在派生文件内；
+- 派生 [c2_ascend910/acceptance_redecide.json](c2_ascend910/acceptance_redecide.json):
+  新比较函数重算 correctness（证据完整、6/6 PASS）+ 新 `decide` 重判
+  → `complete-pending-review` / `failed_checks=[]` / exit 0；
+  `redecide.commit` = 重判代码提交；
+- **profile 误标更正（如实记录）**: 原 summary `profile: ascend910`
+  系旧 harness 硬编码，实际验证环境为 `ascend910-c2-vllm`（环境锁
+  §1 已绑定）——corrections 字段记录 was→now，不覆写原始文件；
+- 采集协议（执行/注入/计数落盘）未变 → **未复跑 NPU**。
+
+复现:
+
+```bash
+python3 scripts/c2_redecide.py \
+  --harness ops/sdpa_math/script/c2_real_vllm_ascend.py \
+  --summary ops/sdpa_math/reports/c2_ascend910/summary.json \
+  --out ops/sdpa_math/reports/c2_ascend910/acceptance_redecide.json
+python3 -m pytest tests/unit/test_c2_evidence_phase.py -q
+```
+
+**已知边界（结论限定）**: 本 C2 结论限定为**已测单请求配置**
+（`max_num_seqs` 默认、无多请求混合调度）；多请求 / cached / chunked
+prefill 的真实引擎覆盖**尚未完成**——CPU 回归（§4 几何修复）不等于该
+场景 NPU 已验收，后续矩阵另列，未跑场景不写成已通过。

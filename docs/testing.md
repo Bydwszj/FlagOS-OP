@@ -101,12 +101,20 @@ prompt、同一个 seed，唯一变量是你的实现，输出差异就能归因
 - 插件跑: 按 route 注入对应实现，同 prompt 同 seed
 - 断言: 调用计数（pid 分片汇总）> 0 + 输出比对 + [黄金回归](#golden)
 
-验收判定与退出码（#38 意见 4）收敛在纯函数
+验收判定与退出码（#38 意见 4 + 二轮复审意见 1/2）收敛在纯函数
 `scripts/c2_acceptance.py::decide`：**采集成功 ≠ 验收通过**。C2 harness
-默认 `--mode accept`——真实前向命中、同路径正确性 PASS、prompt logprob
-失效线（超 0.5 nats 即 FAIL 不豁免）、性能门禁 OK、计数归因自洽任一
-未过即非零退出；缺证据/子进程失败退出码更高。`--mode collect` 是显式
-采集模式（采集完成退出 0，不代表验收通过，报告须标明所用模式）。
+默认 `--mode accept`——以下必需项任一未过即非零退出：
+- 真实前向命中（engine/worker 生命周期累计 > 0，不回退主进程累计值）；
+- **阶段命中**：correctness 阶段命中支撑正确性验收、measured 阶段命中
+  支撑性能验收（init/warmup/probe 独立保留；归因数据缺失不静默放行）；
+- **输入证据完整性** `evidence_complete=True`（预期 prompt 集非空、两跑
+  完整唯一覆盖、身份对应、token 有效——先验证再比较，双方空输出不得
+  产出“6/6 PASS”）；
+- 同路径正确性 PASS；
+- prompt logprob 失效线（超 0.5 nats 即 FAIL 不豁免）；
+- 性能门禁 OK；计数归因自洽（check 缺失也不放行）。
+缺证据/子进程失败退出码更高。`--mode collect` 是显式采集模式（采集完成
+退出 0，不代表验收通过，报告须标明所用模式）。
 
 三条路线注入方式见各自文档（[A1](route-a1-aten.md) /
 [A2](route-a2-dispatch.md) / [B](route-b-vendor.md)）。
