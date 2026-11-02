@@ -241,6 +241,9 @@ def _demo_lock(*, name="demo-1", scope=None, evidence=None) -> dict:
 def test_lock_scope_and_evidence_crossref_passes(tmp_path: Path):
     _make_repo(
         tmp_path,
+        records={"demo-1": {"level": "C2", "basis": _C1_BASIS,
+                            "report": "ops/demo_op/REPORT.md"}},
+        paths=["ops/demo_op/REPORT.md"],
         report="# demo\n\nFlagOS E2E 结果见 profile demo-1 复验。\n",
         lock=_demo_lock(
             scope=["ops/demo_op C2（真实 vLLM 双跑 2026-10-29）"],
@@ -311,6 +314,65 @@ def test_lock_scope_unknown_operator_is_rejected(tmp_path: Path):
     _make_repo(tmp_path, lock=_demo_lock(scope=["ops/ghost_op backend"]))
     errors = check(tmp_path)
     assert any("catalog 没有登记的算子 ops/ghost_op" in e for e in errors)
+
+
+# ── 预审新增 P2：锁证据 JSON 缺 profile/损坏不得无声跳过 ──
+
+def test_lock_evidence_json_missing_profile_is_rejected(tmp_path: Path):
+    """阴性（预审复现）：锁证据 JSON 缺 profile 单独报错（无 C2 scope 也报）。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "noprof.json").write_text(
+        json.dumps({"status": "PASS"}), encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{
+            "path": "ops/demo_op/reports/noprof.json",
+            "note": "缺 profile 的结构化证据",
+        }]),
+    )
+    errors = check(tmp_path)
+    assert any("缺少 profile 字段" in e and "不能作为支撑" in e
+               for e in errors)
+
+
+def test_lock_evidence_corrupt_json_is_rejected_and_not_supporting(
+        tmp_path: Path):
+    """阴性（预审复现）：损坏 JSON 单独报错，且不能成为 C2 支撑。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "broken.json").write_text(
+        "{ not valid json", encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（真实 vLLM 双跑）"],
+            evidence=[{
+                "path": "ops/demo_op/reports/broken.json",
+                "note": "损坏报告",
+            }],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("JSON 解析失败" in e and "不能作为支撑" in e for e in errors)
+    assert any("没有对应报告支撑" in e for e in errors)
+
+
+def test_lock_evidence_json_declaring_profile_passes(tmp_path: Path):
+    """阳性：声明本锁 profile 的结构化证据正常通过（无 C2 scope）。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "ok.json").write_text(
+        json.dumps({"profile": "demo-1", "status": "PASS"}),
+        encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{
+            "path": "ops/demo_op/reports/ok.json",
+            "note": "正常结构化报告",
+        }]),
+    )
+    assert check(tmp_path) == []
 
 
 # ── 审阅 #1 [P1]：证据等级必须绑定具体 profile（算子+profile 为最小单位）──
@@ -436,7 +498,7 @@ def test_c2_record_json_missing_status_is_rejected(tmp_path: Path):
 # ── 审阅 #2 [P1]：锁的交叉校验必须绑定锁对应 profile ──
 
 def test_lock_c2_scope_backed_by_same_profile_report_passes(tmp_path: Path):
-    """阳性：锁 profile=demo-1 的 C2 声明由声明 demo-1 的结构化报告支撑。"""
+    """阳性：锁 profile=demo-1 的 C2 声明由其 C2 记录 report（同源、PASS）支撑。"""
     (tmp_path / "ops" / "demo_op" / "reports").mkdir(
         parents=True, exist_ok=True)
     (tmp_path / "ops" / "demo_op" / "reports"
@@ -446,6 +508,11 @@ def test_lock_c2_scope_backed_by_same_profile_report_passes(tmp_path: Path):
         encoding="utf-8")
     _make_repo(
         tmp_path,
+        records={"demo-1": {
+            "level": "C2", "basis": "demo 引擎双跑 2026-10-29",
+            "report": "ops/demo_op/reports/e2e_vllm_c2_demo-1.json",
+        }},
+        paths=["ops/demo_op/reports/e2e_vllm_c2_demo-1.json"],
         lock=_demo_lock(
             scope=["ops/demo_op C2（真实 vLLM EngineCore 消费）"],
             evidence=[{
@@ -455,6 +522,72 @@ def test_lock_c2_scope_backed_by_same_profile_report_passes(tmp_path: Path):
         ),
     )
     assert check(tmp_path) == []
+
+
+def test_lock_c2_scope_backed_by_fail_status_json_is_rejected(
+        tmp_path: Path):
+    """阴性（预审复现）：`status=FAIL` 的同 profile JSON 不能给 C2 背书。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "bad.json").write_text(
+        json.dumps({"profile": "demo-1", "status": "FAIL"}),
+        encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（真实 vLLM 双跑）"],
+            evidence=[{
+                "path": "ops/demo_op/reports/bad.json",
+                "note": "FAIL 报告",
+            }],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("支撑报告不合格" in e and "状态非通过" in e for e in errors)
+
+
+def test_lock_c2_scope_backed_by_statusless_json_is_rejected(
+        tmp_path: Path):
+    """阴性（预审复现）：缺 `status`/`ok` 的同 profile JSON 不能给 C2 背书。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "bad.json").write_text(
+        json.dumps({"profile": "demo-1"}), encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（真实 vLLM 双跑）"],
+            evidence=[{
+                "path": "ops/demo_op/reports/bad.json",
+                "note": "无状态报告",
+            }],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("支撑报告不合格" in e and "缺少 status/ok" in e
+               for e in errors)
+
+
+def test_lock_c2_scope_backed_by_unassociated_json_is_rejected(
+        tmp_path: Path):
+    """阴性：PASS 但与该 profile 的 C2 记录 report/consumer 无同源关联。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "other.json").write_text(
+        json.dumps({"profile": "demo-1", "status": "PASS"}),
+        encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（真实 vLLM 双跑）"],
+            evidence=[{
+                "path": "ops/demo_op/reports/other.json",
+                "note": "无关联报告",
+            }],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("支撑报告不合格" in e and "无关联" in e for e in errors)
 
 
 def test_lock_c2_scope_backed_by_other_profile_report_is_rejected(
@@ -678,6 +811,40 @@ def test_e2e_row_with_full_token_profile_passes(tmp_path: Path):
         "# demo\n\n"
         "| FlagOS E2E | `script --profile demo-1` | ☑ PASS "
         "| [reports/e2e_flagos_demo-1.json](reports/e2e_flagos_demo-1.json) |\n"
+    )
+    _make_repo(tmp_path, report=report)
+    assert check(tmp_path) == []
+
+
+def test_e2e_row_referenced_json_declaring_other_profile_is_rejected(
+        tmp_path: Path):
+    """阴性：成功行标 demo-1，所引结构化证据却声明 demo-2（范围不一致）。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "e2e_other.json").write_text(
+        json.dumps({"profile": "demo-2", "status": "PASS"}),
+        encoding="utf-8")
+    report = (
+        "# demo\n\n"
+        "| FlagOS E2E | `script --profile demo-1` | ☑ PASS "
+        "| [reports/e2e_other.json](reports/e2e_other.json) |\n"
+    )
+    _make_repo(tmp_path, report=report)
+    errors = check(tmp_path)
+    assert any("成功行所引证据" in e and "范围不一致" in e for e in errors)
+
+
+def test_e2e_row_referenced_json_matching_profile_passes(tmp_path: Path):
+    """阳性：成功行标 demo-1，所引结构化证据声明 demo-1（范围一致）。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "e2e_ok.json").write_text(
+        json.dumps({"profile": "demo-1", "status": "PASS"}),
+        encoding="utf-8")
+    report = (
+        "# demo\n\n"
+        "| FlagOS E2E | `script --profile demo-1` | ☑ PASS "
+        "| [reports/e2e_ok.json](reports/e2e_ok.json) |\n"
     )
     _make_repo(tmp_path, report=report)
     assert check(tmp_path) == []

@@ -71,6 +71,16 @@
   A2 插件与内置 backend impl_id 冲突）与 #5 的 XPU1 Xid 补注
 
 ### Changed
+- **证据门禁预审两项阻断修复（issue #41 提交前预审）**：
+  `scripts/evidence_check.py` 锁 C2 支撑改「有效且通过 + 同源关联」
+  ——支撑 JSON 必须可解析、声明本锁 profile、`status`/`ok` 为通过态
+  （挡 `status=FAIL` / 缺 status 假阳性背书），且与该 profile 的 C2
+  记录 `report`/`consumer` 同源（等于记录 report、列入 evidence_paths
+  或 consumer 一致）；锁证据 JSON 损坏/缺 profile 单独报错、不再无声
+  跳过且不能成为支撑；REPORT 成功行所引结构化 JSON 若声明 profile
+  必须与行内范围一致（未声明 profile 的存量文件登记在
+  `docs/operator-catalog.md` 已知未覆盖范围）；配套阴性/阳性单测
+  （`tests/unit/test_evidence_check.py` 51 项）
 - **证据等级按 profile 记录 + 锁交叉校验收紧（issue #41 审阅落实）**：
   `ops/catalog.yaml` 以「算子 + profile」为证据记录最小单位
   （`platforms.<family>.evidence.profiles.<profile>` 记 level/basis/

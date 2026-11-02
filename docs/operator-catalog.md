@@ -141,17 +141,25 @@ profile（如 `thead-ppu` 与 `thead-ppu-c2`、`p800-kunlunxin` 与
 - 聚合页 `ops/<算子>/REPORT.md` 里宣称通过的 FlagOS E2E 结果行必须出现
   已知 profile 的**完整 token**（边界匹配：`demo-10`、`NOT-demo-1-invalid`
   都不算 `demo-1`；文件名内嵌的完整 profile 名算命中）；已知 profile 集
-  为空时存在成功声明即报错——P800 的结果不能自动代表 PPU；
+  为空时存在成功声明即报错——P800 的结果不能自动代表 PPU；行内引用的
+  结构化 JSON 证据若声明 `profile`，必须与行内 profile 范围一致（拿
+  别的环境的报告给成功行背书即报错；未声明 profile 的存量文件不在
+  本层臆断范围，见「已知未覆盖范围」）；
 - 所有证据路径（catalog `evidence_paths`/`report`、环境锁
   `evidence[].path`）经统一解析：禁外链、禁绝对路径、`resolve()` 后必须
   仍在仓库根内、必须是文件（目录、`..` 越界、仓库外 symlink 均拒绝），
   算子归属基于规范化后的仓库相对路径；
 - `configs/env/*.lock.yaml` 的 `evidence[].path` 必须是仓库内当前存在的
-  报告（禁外链、禁占位），结构化 JSON 证据声明的 `profile` 必须与锁
-  `name` 一致（P800 报告不能给 PPU 的 C2 声明背书）；`scope` 行里的
-  `ops/<算子>` 必须登记在 catalog，`ops/<算子> C[012]` 声明必须等于
-  **该锁 profile** 记录的等级（而不是 operator 全局汇总），并由本锁
-  `evidence` 中该算子的报告支撑——C2 声明的支撑报告还必须声明该 profile。
+  报告（禁外链、禁占位）；结构化 JSON 证据必须**可解析且声明与锁
+  `name` 一致的 `profile`**——损坏、缺 profile、跨 profile 的 JSON
+  单独报错、不再无声跳过，也不能成为任何支撑（P800 报告不能给 PPU
+  的 C2 声明背书）；`scope` 行里的 `ops/<算子>` 必须登记在 catalog，
+  `ops/<算子> C[012]` 声明必须等于**该锁 profile** 记录的等级（而不是
+  operator 全局汇总），并由本锁 `evidence` 中该算子的**合格**报告支撑
+  ——C2 声明的支撑报告必须有效且通过（JSON 可解析、声明本锁 profile、
+  `status`/`ok` 为通过态，与 catalog 侧报告通过状态检查同口径），并
+  与该 profile 的 C2 记录 `report`/`consumer` 同源关联（等于记录
+  `report`、列入算子 `evidence_paths`、或 consumer 与记录一致）。
 
 基础算子当前的实测报告以 `cambricon` profile 的 2026-09-18 历史快照为主；
 没有独立 `mlu590` 报告时，不应把 `mlu590` 写入算子条目的 `profiles`。环境锁的
@@ -184,9 +192,12 @@ OK 表述成 #41 验收范围全部闭环：
 3. 日期门禁只检查格式合法与不晚于当天，**不判定** stale roadmap/历史结论
    失效；历史证据可以保留，但不能冒充当前环境结论——该内容检查需要逐页
    人工复核，作为 #41 后续项而不是脚本规则。
-4. REPORT E2E 行出现 profile token 只是第一层；该行结论与 catalog 按
-   profile 记录的证据范围是否一致，由 catalog 记录 + 环境锁交叉校验
-   兜底，脚本不解析任意自然语言叙述。
+4. REPORT E2E 行出现 profile token 只是第一层；行内引用的结构化 JSON
+   证据声明的 `profile` 已与行内范围核对，但**未声明 profile 的引用
+   文件**（存量：`ops/sdpa_math/reports/e2e_flagos_p800-kunlunxin.json`
+   无 `profile` 字段）不在本层臆断其范围，补字段属报告数据改动、
+   单独跟踪；行结论与 catalog 按 profile 记录的证据范围是否一致，仍由
+   catalog 记录 + 环境锁交叉校验兜底，脚本不解析任意自然语言叙述。
 
 ## 新增算子
 
