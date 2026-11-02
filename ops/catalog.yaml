@@ -4,11 +4,17 @@
 # - 只登记已交付证据；不要把未来移植写成已完成。
 # - 规划中的厂商只放在 platform_families；测试和报告合入后再加入算子条目。
 # - 修改本文件后运行 scripts/build_ops_index.py。
-# - 每个 platforms.<family> 可带 evidence.level（C0/C1/C2/C2-routing-boundary）
-#   与可选 evidence.report；C2* 级别必须指向存在的报告（issue #41）。
+# - 每个 platforms.<family> 可带 evidence（issue #41 + 复审意见 3）:
+#   - 单条 dict: family 级记录，evidence.level（C0/C1/C2/C2-routing-boundary）
+#     与可选 evidence.report/profile/status；C2* 必须指向存在的报告；
+#   - list: 逐 profile 记录——同一 family 下不同 profile 各自带
+#     level/report/status（「算子 + profile」最小证据单位），不共享
+#     未经区分的等级；profile 必须属于该条目 profiles。
+#   状态词统一: complete-pending-review = C2 证据已采集、待审阅
+#   （区别于 platform_families 的 partial = 平台交付部分完成）。
 
 schema: 1
-updated: 2026-10-30
+updated: 2026-11-01
 
 target_scope:
   vendor_family_count: 6
@@ -105,14 +111,21 @@ operators:
     directory: sdpa_math
     group: core
     purpose: 私有 SDPA math 后端，同时返回完整概率图。
-    key_result: 五份实现通过同一组 175 例黄金数据；Ascend910 引擎侧 C2 真实前向命中（验收状态 PARTIAL，见 reports/c2_ascend910.md）。
+    key_result: 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。
     platforms:
       ascend:
         profiles: [ascend910, ascend910-c2-vllm]
-        implementation: Triton exact-P 路径（C2 证据经引擎侧 FlagOSMathAttentionBackend 调 aten math）
+        # kernel 实现与本次 C2 引擎验证路径分开表述（复审意见 3）:
+        #   kernel = Triton exact-P（黄金/直调路径）；C2 引擎路径 =
+        #   torch 组合 + FlagOSMathAttentionBackend（aten math 后端），
+        #   未启用 Triton/FlagGems。旧 dev profile ascend910 无 C2 声明，
+        #   证据范围见其历史黄金/直调记录。
+        implementation: Triton exact-P kernel（黄金/直调路径）；C2 引擎路径 = torch 组合 + FlagOSMathAttentionBackend（aten math，未启用 Triton/FlagGems）
         evidence:
-          level: C2
-          report: ops/sdpa_math/reports/c2_ascend910.md
+          - profile: ascend910-c2-vllm
+            level: C2
+            report: ops/sdpa_math/reports/c2_ascend910.md
+            status: complete-pending-review
       kunlunxin:
         profiles: [p800-kunlunxin]
         implementation: vendor O/LSE 加 exact-P 重建
@@ -126,14 +139,18 @@ operators:
     directory: embedding
     group: core
     purpose: 稠密 embedding 前向和 dense backward。
-    key_result: p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 引擎侧 C2 真实前向命中（验收状态 PARTIAL，见 reports/c2_ascend910.md）。
+    key_result: p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。
     platforms:
       ascend:
         profiles: [ascend910, ascend910-c2-vllm]
+        # C2 证据只归属 ascend910-c2-vllm；旧 dev profile ascend910 保留
+        # 自己的历史证据范围（无 C2 声明）。
         implementation: CANN index_select 行采集委托（Triton gather 仅探针）
         evidence:
-          level: C2
-          report: ops/embedding/reports/c2_ascend910.md
+          - profile: ascend910-c2-vllm
+            level: C2
+            report: ops/embedding/reports/c2_ascend910.md
+            status: complete-pending-review
       kunlunxin:
         profiles: [p800-kunlunxin]
         implementation: 原生 row-gather 与反向补偿

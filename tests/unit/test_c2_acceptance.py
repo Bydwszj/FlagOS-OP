@@ -22,12 +22,22 @@ def _good_summary(**overrides) -> dict:
         "inject": {"rc": 0, "ok": True},
         "forward_hits": 2880,
         "correctness_same_path": {
+            "evidence_complete": True,
             "correctness_verdict": "PASS",
             "prompt_logprob_same_path": {"max_abs_diff": 0.0},
         },
         "perf": {"gate_verdict": "OK"},
+        "hit_attribution": {
+            "by_role": {
+                "engine/worker": {"hits": 2880, "correctness": 1440,
+                                  "warmup": 240, "measured": 1200},
+                "main": {"hits": 1, "probe": 1},
+            },
+            "outside_windows": 0,
+        },
         "hit_attribution_check": {
-            "hits_total": 2880, "phase_attributed_total": 2880, "consistent": True,
+            "hits_total": 2881, "phase_attributed_total": 2881,
+            "consistent": True,
         },
     }
     s.update(overrides)
@@ -45,7 +55,8 @@ def test_all_green_accept_exit0():
 def test_output_mismatch_with_hits_fails_accept():
     # 控制流 mock 场景 1: 有命中但正确性失配——旧 exit 0 假通过
     s = _good_summary()
-    s["correctness_same_path"] = {"correctness_verdict": "FAIL",
+    s["correctness_same_path"] = {"evidence_complete": True,
+                                  "correctness_verdict": "FAIL",
                                   "prompt_logprob_same_path": {"max_abs_diff": 0.2}}
     d = decide(s, mode="accept")
     assert d["exit_code"] == 1
@@ -84,6 +95,7 @@ def test_logprob_over_limit_fails_accept():
     # logprob 失效线: 超过 0.5 nats → 不豁免
     s = _good_summary()
     s["correctness_same_path"] = {
+        "evidence_complete": True,
         "correctness_verdict": "PASS",
         "prompt_logprob_same_path": {"max_abs_diff": 0.9},
     }
@@ -115,7 +127,8 @@ def test_embedding_summary_shape_correctness_key():
     # embedding harness 用 correctness 键（非 correctness_same_path）
     s = _good_summary()
     del s["correctness_same_path"]
-    s["correctness"] = {"correctness_verdict": "PASS",
+    s["correctness"] = {"evidence_complete": True,
+                        "correctness_verdict": "PASS",
                         "prompt_logprob_same_path": {"max_abs_diff": 0.0}}
     del s["baseline_math"]
     d = decide(s, mode="accept")

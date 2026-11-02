@@ -37,8 +37,9 @@ p95/std），同步方式如实记录（llm.generate 同步阻塞；前向在 En
 
 用法:
   python3 ops/sdpa_math/script/c2_real_vllm_ascend.py --out reports/c2_ascend910
-  # 默认 --mode accept: 命中/正确性/性能门禁/归因任一未过 → 非零退出
-  # --mode collect: 显式采集模式，采集完成即 0（不得被当作验收通过）
+  # 默认 --mode accept: 命中/阶段命中/证据完整性/正确性/性能/归因任一
+  # 未过 → 非零退出；--mode collect: 采集完成即 0（不得被当作验收通过）
+  # 默认 --profile ascend910-c2-vllm（缺 configs/env/<profile>.lock.yaml → exit 2）
 """
 from __future__ import annotations
 
@@ -413,10 +414,79 @@ def _prefix(a: list, b: list) -> tuple[int, int | None]:
     return n, None
 
 
+def _validate_evidence(base: dict, inject: dict) -> list[str]:
+    """比较前的输入证据完整性检查（复审意见 1）。
+
+    双方缺失输出/空 token 时 `[] == []` 会被旧逻辑计成恒等成功——
+    必须先验证: 预期 prompt 集非空；两跑完整、唯一地覆盖预期 prompt_idx；
+    prompt 身份对应；每项 token 输出有效且非空（本 harness 不记录
+    finish 元数据，零 token 不能当作合法 EOS 放行）。
+    """
+    errors: list[str] = []
+    expected = list(range(len(PROMPTS)))
+    if not expected:
+        errors.append("expected prompt set is empty")
+        return errors
+    for side, run in (("baseline", base), ("inject", inject)):
+        outs = run.get("outputs")
+        if outs is None:
+            errors.append(f"{side}: outputs missing")
+            continue
+        if not isinstance(outs, list):
+            errors.append(f"{side}: outputs is not a list")
+            continue
+        idxs = [o.get("prompt_idx") if isinstance(o, dict) else None
+                for o in outs]
+        seen: list = []
+        duplicates: list = []
+        for i in idxs:
+            if i in seen and i not in duplicates:
+                duplicates.append(i)
+            seen.append(i)
+        if duplicates:
+            errors.append(f"{side}: duplicate prompt_idx {duplicates}")
+        missing = [i for i in expected if i not in seen]
+        if missing:
+            errors.append(f"{side}: missing prompt_idx {missing}")
+        extra = [i for i in seen if i not in expected]
+        if extra:
+            errors.append(f"{side}: unexpected prompt_idx {extra}")
+        by_idx = {o.get("prompt_idx"): o for o in outs
+                  if isinstance(o, dict)}
+        for i in expected:
+            o = by_idx.get(i)
+            if o is None:
+                continue  # already reported as missing
+            if o.get("prompt") != PROMPTS[i]:
+                errors.append(f"{side}: prompt_idx {i} identity mismatch")
+            t = o.get("token_ids")
+            if t is None:
+                errors.append(f"{side}: prompt_idx {i} token_ids missing")
+            elif len(t) == 0:
+                errors.append(
+                    f"{side}: prompt_idx {i} token_ids empty"
+                    "（无 finish 元数据，不作合法 EOS 放行）")
+    return errors
+
+
 def correctness_compare(base: dict, inject: dict) -> dict:
     """预注册判据的执行（C1 恒等 / C2 自定义数值实现下限）。"""
     if not (base.get("ok") and inject.get("ok")):
-        return {"applicable": False, "reason": "base/inject 未全部成功"}
+        return {"applicable": False, "reason": "base/inject 未全部成功",
+                "evidence_complete": False}
+    errors = _validate_evidence(base, inject)
+    if errors:
+        # 证据不完整 → 不进入数值比较（复审意见 1: 先验证、再比较）
+        return {
+            "applicable": True,
+            "evidence_complete": False,
+            "evidence_errors": errors,
+            "expected_prompt_count": len(PROMPTS),
+            "correctness_verdict": "FAIL",
+            "identity_pass": False,
+            "identity_pass_count": None,
+            "prompt_logprob_same_path": None,
+        }
     b_outs = {o["prompt_idx"]: o for o in base.get("outputs") or []}
     i_outs = {o["prompt_idx"]: o for o in inject.get("outputs") or []}
     per_prompt, n_identity, n_first2 = [], 0, 0
@@ -471,6 +541,12 @@ def correctness_compare(base: dict, inject: dict) -> dict:
 
     return {
         "applicable": True,
+        "evidence_complete": True,
+        "evidence_errors": [],
+        "evidence_policy": "预期 prompt 集非空；两跑完整、唯一覆盖预期 "
+                           "prompt_idx；prompt 身份一致；每项 token_ids "
+                           "有效且非空；缺失/重复/错配直接 FAIL（不进入"
+                           "数值比较）",
         "criterion_predeclared": {
             "C1_identity": "baseline_math vs inject 逐 prompt 生成前缀完全一致"
                             "（6/6 prompt，位级）",
@@ -544,10 +620,18 @@ def main() -> int:
     ap.add_argument("--a1-impl", default="torch",
                     help="inject 组显式 FLAGOS_A1_IMPL（意见 5，如实落盘；"
                          "空串=不设置，由算子默认实现）")
+    ap.add_argument("--profile", default="ascend910-c2-vllm",
+                    help="实际验证环境 profile（复审意见 3，必须有对应 "
+                         "configs/env/<profile>.lock.yaml 环境锁）")
     args = ap.parse_args()
     model = args.model
     if not pathlib.Path(model).is_dir():
         print(f"model path missing: {model}", file=sys.stderr)
+        return 2
+    env_lock = ROOT / "configs" / "env" / f"{args.profile}.lock.yaml"
+    if not env_lock.is_file():
+        print(f"env lock missing for profile {args.profile}: {env_lock}",
+              file=sys.stderr)
         return 2
     out_dir = pathlib.Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -575,12 +659,18 @@ def main() -> int:
         else:
             h["role"] = "main" if h["pid"] == inject["pid"] else "engine/worker"
     attr = attribute_hits(hits, inject, phases)
-    engine_hits = int(attr["by_role"].get("engine/worker", {}).get("hits") or 0)
-    main_hits = int(attr["by_role"].get("main", {}).get("hits") or 0)
+    engine_bucket = attr["by_role"].get("engine/worker") or {}
+    main_bucket = attr["by_role"].get("main") or {}
+    engine_hits = int(engine_bucket.get("hits") or 0)
+    main_hits = int(main_bucket.get("hits") or 0)
+    # 复审意见 2: forward_hits 只取 engine/worker 生命周期累计（不回退
+    # 主进程累计值）；正确性/性能验收分别由 decide 强制 correctness/
+    # measured 阶段命中（engine 角色），probe/init/warmup 独立保留。
     forward_hits = engine_hits
-    if (forward_hits or 0) == 0:
-        forward_hits = inject.get("main_counter_snapshots", {}).get(
-            "after_correctness") or 0
+    engine_phase_hits = {k: int(v) for k, v in engine_bucket.items()
+                         if k != "hits"}
+    correctness_phase_hits = int(engine_bucket.get("correctness") or 0)
+    measured_phase_hits = int(engine_bucket.get("measured") or 0)
     probe_hits = inject.get("probe_hits_after_direct_call")
     hits_total = sum(int(h.get("hits") or 0) for h in hits)
     phase_total = sum(
@@ -593,22 +683,24 @@ def main() -> int:
     perfs = {m: (results[m].get("perf")) for m in MODES}
     perf = perf_compare(perfs)
 
+    # acceptance.status 不在此处单独派生——由下方 decide 同一次判定
+    # 统一给出（复审意见 2: 避免 summary 同时留两个互相矛盾的状态）。
     acceptance = {
         "hit": bool((forward_hits or 0) > 0),
+        "correctness_phase_hits": correctness_phase_hits,
+        "measured_phase_hits": measured_phase_hits,
         "correctness_same_path": correctness.get("correctness_verdict"),
         "perf_same_path_gate": perf["gate_verdict"],
         "rc_all_zero": all(results[m].get("rc") == 0 for m in MODES
                            if not results[m].get("skipped")),
     }
-    complete = (acceptance["hit"]
-                and acceptance["correctness_same_path"] == "PASS"
-                and acceptance["perf_same_path_gate"] == "OK")
-    acceptance["status"] = ("complete-pending-review" if complete else "PARTIAL")
 
     summary = {
-        "schema": 3,
+        "schema": 4,
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "profile": "ascend910",
+        # 复审意见 3: 显式记录实际验证 profile 并核对环境锁（不再硬编码旧名）
+        "profile": args.profile,
+        "env_lock": f"configs/env/{args.profile}.lock.yaml",
         "engine": "vllm-ascend",
         "commit": commit,
         "run_id": run_id,
@@ -660,6 +752,9 @@ def main() -> int:
         "engine_core_hits": engine_hits,
         "main_process_hits": main_hits,
         "forward_hits": forward_hits,
+        "engine_phase_hits": engine_phase_hits,
+        "correctness_phase_hits": correctness_phase_hits,
+        "measured_phase_hits": measured_phase_hits,
         "total_hits_all_incl_probe": hits_total,
         "probe_hits_after_direct_call": probe_hits,
         "outputs_equal": (
@@ -673,6 +768,17 @@ def main() -> int:
         "c2_status": None,
         "notes": [],
     }
+    # 意见 4 + 复审意见 2: 验收判定与退出码收敛为纯函数
+    # （scripts/c2_acceptance.decide）。accept 模式: 命中/阶段命中/证据
+    # 完整性/正确性 PASS/logprob 失效线/性能 OK/归因自洽任一未过 → 1；
+    # 采集失败/缺证据 → 2。collect 模式: 仅采集完成 exit 0（不代表验收
+    # 通过）。acceptance.status 与 acceptance_decision 由同一次判定派生，
+    # 避免 summary 留两个互相矛盾的状态。
+    decision = decide(summary, mode=args.mode)
+    summary["acceptance_decision"] = decision
+    summary["run_mode"] = args.mode
+    acceptance["status"] = decision["acceptance_status"]
+
     ok_run = all(results[m].get("ok") for m in MODES
                  if not results[m].get("skipped"))
     if ok_run:
@@ -690,10 +796,11 @@ def main() -> int:
         else:
             summary["c2_status"] = "c2-inject-unverified"
             summary["notes"].append("注入进程 probe 未命中，注册链存疑")
-        if acceptance["status"] == "PARTIAL":
+        if acceptance["status"] in ("PARTIAL", "FAILED"):
             summary["notes"].append(
-                "验收状态 PARTIAL: 真实引擎已尝试、命中待复核/正确性或性能"
-                "未闭环——按 #38 意见 6 不写「C2 验收通过」。")
+                f"验收状态 {acceptance['status']}: 真实引擎已尝试但必需项"
+                "未全部通过（明细见 acceptance_decision.failed_checks）"
+                "——按 #38 意见 6 不写「C2 验收通过」。")
         if correctness.get("correctness_verdict") in ("INCONCLUSIVE", "FAIL"):
             summary["notes"].append(
                 f"同路径正确性 {correctness['correctness_verdict']}: 首分歧"
@@ -702,14 +809,6 @@ def main() -> int:
     else:
         summary["c2_status"] = "c2-failed"
         summary["notes"].append("至少一组跑失败，见 *.stderr.log")
-
-    # 意见 4: 验收判定与退出码收敛为纯函数（scripts/c2_acceptance.decide）。
-    # accept 模式: 命中/正确性 PASS/logprob 失效线/性能 OK/归因自洽任一
-    # 未过 → exit 1；采集失败/缺证据 → exit 2。
-    # collect 模式: 仅采集完成 exit 0（显式采集，不代表验收通过）。
-    decision = decide(summary, mode=args.mode)
-    summary["acceptance_decision"] = decision
-    summary["run_mode"] = args.mode
 
     (out_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2))
@@ -729,10 +828,14 @@ def main() -> int:
         "forward_hits": forward_hits,
         "engine_core_hits": engine_hits,
         "main_process_hits": main_hits,
+        "engine_phase_hits": engine_phase_hits,
+        "correctness_phase_hits": correctness_phase_hits,
+        "measured_phase_hits": measured_phase_hits,
         "phase_attribution": attr["by_role"],
         "stale_excluded": len(stale),
         "correctness_same_path": {
             "verdict": correctness.get("correctness_verdict"),
+            "evidence_complete": correctness.get("evidence_complete"),
             "identity": correctness.get("identity_pass_count"),
             "first2": correctness.get("first2_match"),
         },

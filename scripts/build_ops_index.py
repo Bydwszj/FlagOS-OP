@@ -43,6 +43,49 @@ def _require_mapping(value, name: str) -> dict:
     return value
 
 
+def _validate_evidence_entry(op_name: str, family: str, evidence: dict,
+                             profiles: list, root: Path,
+                             index: str = "") -> None:
+    """校验单条 evidence（dict 或 list 元素；issue #41 + 复审意见 3）。
+
+    - level 必须在 C0/C1/C2/C2-routing-boundary；
+    - C2 / C2-routing-boundary 必须提供 evidence.report 且路径存在；
+    - 若提供 report，无论 level 都必须存在（禁止占位证据）；
+    - 提供 profile 时必须是该平台条目 profiles 之一（证据按「算子 +
+      profile」归属，不能让同 family 下其他 profile 共享等级）。
+    """
+    where = f"operator {op_name}/{family}{index}"
+    if not isinstance(evidence, dict) or not evidence:
+        raise ValueError(f"{where}.evidence must be a non-empty mapping")
+    level = evidence.get("level")
+    if level not in VALID_EVIDENCE_LEVELS:
+        raise ValueError(
+            f"{where}.evidence.level must be one of "
+            f"{sorted(VALID_EVIDENCE_LEVELS)}, got {level!r}")
+    profile = evidence.get("profile")
+    if profile is not None:
+        if not isinstance(profile, str) or not profile:
+            raise ValueError(f"{where}.evidence.profile must be a string")
+        if profile not in profiles:
+            raise ValueError(
+                f"{where}.evidence.profile {profile!r} outside "
+                f"platform profiles {profiles}")
+    report = evidence.get("report")
+    if level in C2_LEVELS and not report:
+        raise ValueError(
+            f"{where} evidence.level={level} requires "
+            "evidence.report (真实引擎证据必须可追溯)")
+    if report is not None:
+        if not isinstance(report, str) or not report:
+            raise ValueError(
+                f"{where}.evidence.report must be a "
+                "non-empty string")
+        if not (root / report).is_file():
+            raise ValueError(
+                f"{where}.evidence.report does not "
+                f"exist: {report}")
+
+
 def _validate_evidence(op_name: str, family: str, platform: dict,
                        root: Path) -> None:
     """校验 platforms.<family>.evidence（issue #41）。
@@ -50,35 +93,32 @@ def _validate_evidence(op_name: str, family: str, platform: dict,
     仅结构性/路径检查（见模块 docstring）: 不解读报告内容、不重跑实验、
     不替代 CI 与审阅复核。
 
-    - level 必须在 C0/C1/C2/C2-routing-boundary；
-    - C2 / C2-routing-boundary 必须提供 evidence.report 且路径存在；
-    - 若提供 report，无论 level 都必须存在（禁止占位证据）。
+    形态（复审意见 3「算子 + profile」最小单位）:
+      - dict: 单条 family 级记录（可带 profile/status 绑定）；
+      - list: 逐 profile 记录——同一 family 下不同 profile 各自带
+        level/report/status，不共享未经区分的等级（与 PR46 意见 1 同源）。
     """
     evidence = platform.get("evidence")
     if evidence is None:
         return
-    if not isinstance(evidence, dict) or not evidence:
-        raise ValueError(
-            f"operator {op_name}/{family}.evidence must be a non-empty mapping")
-    level = evidence.get("level")
-    if level not in VALID_EVIDENCE_LEVELS:
-        raise ValueError(
-            f"operator {op_name}/{family}.evidence.level must be one of "
-            f"{sorted(VALID_EVIDENCE_LEVELS)}, got {level!r}")
-    report = evidence.get("report")
-    if level in C2_LEVELS and not report:
-        raise ValueError(
-            f"operator {op_name}/{family} evidence.level={level} requires "
-            "evidence.report (真实引擎证据必须可追溯)")
-    if report is not None:
-        if not isinstance(report, str) or not report:
+    profiles = platform.get("profiles") or []
+    if isinstance(evidence, list):
+        if not evidence:
             raise ValueError(
-                f"operator {op_name}/{family}.evidence.report must be a "
-                "non-empty string")
-        if not (root / report).is_file():
-            raise ValueError(
-                f"operator {op_name}/{family}.evidence.report does not "
-                f"exist: {report}")
+                f"operator {op_name}/{family}.evidence list must be non-empty")
+        seen_profiles = set()
+        for i, item in enumerate(evidence):
+            _validate_evidence_entry(op_name, family, item, profiles, root,
+                                     index=f"[{i}]")
+            p = (item or {}).get("profile")
+            if p is not None:
+                if p in seen_profiles:
+                    raise ValueError(
+                        f"operator {op_name}/{family}.evidence duplicate "
+                        f"profile entry: {p}")
+                seen_profiles.add(p)
+        return
+    _validate_evidence_entry(op_name, family, evidence, profiles, root)
 
 
 def validate_catalog(catalog: dict, root: Path = ROOT) -> None:
@@ -271,12 +311,30 @@ def _core_rows(catalog: dict) -> list[str]:
     return rows
 
 
-def _evidence_suffix(platform: dict) -> str:
-    evidence = platform.get("evidence") or {}
-    level = evidence.get("level")
+def _evidence_entry_suffix(entry: dict) -> str:
+    level = entry.get("level")
     if not level:
         return ""
-    return f" · {level}"
+    text = f"{level}@{entry['profile']}" if entry.get("profile") else level
+    if entry.get("status"):
+        text = f"{text}·{entry['status']}"
+    return text
+
+
+def _evidence_suffix(platform: dict) -> str:
+    """README 证据后缀——按「算子 + profile」展示（复审意见 3）。
+
+    list 形态逐 profile 列出（如 `C2@ascend910-c2-vllm·complete-pending-review`），
+    避免同 family 下旧 profile 被显示为共享同一等级。
+    """
+    evidence = platform.get("evidence")
+    if not evidence:
+        return ""
+    if isinstance(evidence, list):
+        parts = [s for s in (_evidence_entry_suffix(e) for e in evidence) if s]
+        return " · " + " · ".join(parts) if parts else ""
+    single = _evidence_entry_suffix(evidence)
+    return f" · {single}" if single else ""
 
 
 def _foundation_rows(catalog: dict, group: str) -> list[str]:

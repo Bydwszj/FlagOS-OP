@@ -49,8 +49,8 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 | 算子 | 作用 | 平台 | 关键结论 |
 |---|---|---|---|
 | [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910 · C1） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（mlu590 · C1） · 平头哥（thead-ppu） | 四平台黄金覆盖 397/397。 |
-| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2） · 昆仑芯（p800-kunlunxin · C1） · 平头哥（thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 引擎侧 C2 真实前向命中（验收状态 PARTIAL，见 reports/c2_ascend910.md）。 |
-| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（cambricon · C1） · 平头哥（thead-ppu） | p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 引擎侧 C2 真实前向命中（验收状态 PARTIAL，见 reports/c2_ascend910.md）。 |
+| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 平头哥（thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
+| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（cambricon · C1） · 平头哥（thead-ppu） | p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
 
 ## 基础 ATen 算子
 

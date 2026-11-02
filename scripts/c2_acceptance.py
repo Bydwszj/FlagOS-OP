@@ -11,7 +11,8 @@
 accept 入口遇失败/缺证返回非零；--collect 显式采集模式除外（不得被
 CI 当作验收通过——文档与 PR 描述须标明本次跑的是哪个模式）。
 
-正例/负例回归: tests/unit/test_c2_acceptance.py。
+正例/负例回归: tests/unit/test_c2_acceptance.py、
+tests/unit/test_c2_evidence_phase.py（复审 1/2: 证据完整性 + 阶段命中断言）。
 wt-2026-10-30-fix
 """
 from __future__ import annotations
@@ -78,13 +79,43 @@ def decide(summary: dict, mode: str = "accept") -> dict:
     if not (int(summary.get("forward_hits") or 0) > 0):
         failed.append("hit: forward_hits==0（真实前向未命中目标算子）")
 
-    # 2) 同路径正确性（预注册判据）必须 PASS
-    verdict = _correctness_block(summary).get("correctness_verdict")
+    # 1b) 阶段命中（复审意见 2: 生命周期累计只证明注册存在；
+    #     正确性验收要求推理进程在 correctness 阶段命中，性能验收要求
+    #     measured 阶段命中；归因数据缺失不得静默放行）
+    attribution = summary.get("hit_attribution") or {}
+    by_role = attribution.get("by_role") or {}
+    engine = by_role.get("engine/worker") or {}
+    if not attribution:
+        failed.append(
+            "attribution: hit_attribution 缺失（阶段归因数据缺失，不得静默放行）")
+    else:
+        corr_phase = int(engine.get("correctness") or 0)
+        meas_phase = int(engine.get("measured") or 0)
+        if corr_phase <= 0:
+            failed.append(
+                f"hit: engine/worker correctness 阶段命中={corr_phase}"
+                "（正确性验收要求推理进程在 correctness 阶段命中目标算子）")
+        if meas_phase <= 0:
+            failed.append(
+                f"hit: engine/worker measured 阶段命中={meas_phase}"
+                "（性能验收要求 measured 阶段命中目标算子）")
+
+    # 2) 输入证据完整性（复审意见 1: 先验证证据完整，再比较数值——
+    #     双方缺失/空 token/缺 prompt 时旧比较函数会产出假 6/6 PASS）
+    cb = _correctness_block(summary)
+    if cb.get("evidence_complete") is not True:
+        failed.append(
+            "correctness: evidence_complete 非 True"
+            f"（值={cb.get('evidence_complete')!r}；预期 prompt 集非空、"
+            "两跑完整唯一覆盖、身份对应、token 有效是数值比较的前置条件）")
+
+    # 3) 同路径正确性（预注册判据）必须 PASS
+    verdict = cb.get("correctness_verdict")
     if verdict != "PASS":
         failed.append(f"correctness: verdict={verdict!r}（必需 PASS）")
 
-    # 3) logprob 失效线: 差异超限 → FAIL（不豁免）
-    lp = _correctness_block(summary).get("prompt_logprob_same_path") or {}
+    # 4) logprob 失效线: 差异超限 → FAIL（不豁免）
+    lp = cb.get("prompt_logprob_same_path") or {}
     lp_max = lp.get("max_abs_diff")
     if lp_max is None:
         warnings.append("logprob: max_abs_diff 缺失（prompt_logprobs 不可用）")
@@ -93,14 +124,18 @@ def decide(summary: dict, mode: str = "accept") -> dict:
             f"logprob: max_abs_diff={lp_max} > {LOGPROB_MAX_ABS_DIFF_LIMIT}"
             "（超出数值精度差量级，正确性证据失效）")
 
-    # 4) 同路径/同调用链性能门禁
+    # 5) 同路径/同调用链性能门禁
     gate = _perf_gate(summary)
     if gate != "OK":
         failed.append(f"perf: gate_verdict={gate!r}（必需 OK）")
 
-    # 5) 计数归因自洽（阶段归因总和 == hits 总和）
-    check = summary.get("hit_attribution_check") or {}
-    if check and not check.get("consistent"):
+    # 6) 计数归因自洽（阶段归因总和 == hits 总和；check 缺失也不放行）
+    check = summary.get("hit_attribution_check")
+    if check is None:
+        failed.append(
+            "attribution: hit_attribution_check 缺失"
+            "（归因一致性校验缺失，不得静默放行）")
+    elif not check.get("consistent"):
         failed.append(
             f"attribution: hits_total={check.get('hits_total')} != "
             f"phase_attributed_total={check.get('phase_attributed_total')}")
