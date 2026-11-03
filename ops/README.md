@@ -35,7 +35,7 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 
 | 目标平台 | 当前状态 | 已登记算子 | 当前 profile / 型号 |
 |---|---|---:|---|
-| 华为昇腾（`ascend`） | 部分交付 | 2 | `ascend910` |
+| 华为昇腾（`ascend`） | 部分交付 | 3 | `ascend910` · `ascend910-c2-vllm` |
 | 寒武纪（`cambricon`） | 部分交付 | 15 | `cambricon` · `mlu590` |
 | 昆仑芯（`kunlunxin`） | 部分交付 | 16 | `p800-kunlunxin` · `p800-kunlunxin-gems5` |
 | 平头哥（`thead`） | 部分交付 | 3 | `thead-ppu` · `thead-ppu-c2` |
@@ -48,9 +48,9 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 
 | 算子 | 作用 | 平台 | 关键结论 |
 |---|---|---|---|
-| [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910） · 昆仑芯（p800-kunlunxin） · 寒武纪（mlu590） · 平头哥（thead-ppu） | 四平台黄金覆盖 397/397。 |
-| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910） · 昆仑芯（p800-kunlunxin） · 平头哥（thead-ppu） | 五份实现通过同一组 175 例黄金数据。 |
-| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 昆仑芯（p800-kunlunxin） · 寒武纪（cambricon） · 平头哥（thead-ppu） | 已在三个当前厂商平台交付；MLU/PPU 侧具备逐位覆盖，Ascend 结果保留为历史实验。 |
+| [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910 · C1） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（mlu590 · C1） · 平头哥（thead-ppu） | 四平台黄金覆盖 397/397。 |
+| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 平头哥（thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
+| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（cambricon · C1） · 平头哥（thead-ppu） | p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
 
 ## 基础 ATen 算子
 

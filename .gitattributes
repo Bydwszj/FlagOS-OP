@@ -1,0 +1,4 @@
+# 原始引擎/测试日志按字节保留，不因行尾空白被 git diff --check 拦截
+# （vLLM/EngineCore 等第三方输出自带行尾空格；#38 意见 7: 统一 whitespace
+#  处理——日志保持原始字节，代码/文档维持 whitespace 检查）。
+*.log -whitespace

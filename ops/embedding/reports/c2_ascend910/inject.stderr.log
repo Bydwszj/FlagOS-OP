@@ -1,0 +1,86 @@
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/npu/__init__.py:539: UserWarning: You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. The return value of get_device_capability is only for compatibility with PyTorch and does not represent the actual capability of the NPU device.
+  warnings.warn(f"You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. {warning_str}")
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/device_info.py:58: UserWarning: [device_info] torch_device_fn.get_device_capability returned None for device_id=0, fallback to (0, 0).
+  warnings.warn(
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/npu/__init__.py:539: UserWarning: You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. The return value of get_device_capability is only for compatibility with PyTorch and does not represent the actual capability of the NPU device.
+  warnings.warn(f"You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. {warning_str}")
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/device_info.py:58: UserWarning: [device_info] torch_device_fn.get_device_capability returned None for device_id=0, fallback to (0, 0).
+  warnings.warn(
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/libentry.py:411: RuntimeWarning: active Triton backend does not provide a replay benchmarker; falling back to event timing
+  resolved_benchmark = resolve_benchmarker(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/npu/__init__.py:539: UserWarning: You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. The return value of get_device_capability is only for compatibility with PyTorch and does not represent the actual capability of the NPU device.
+  warnings.warn(f"You can set the device capability via the environment variable TORCH_NPU_DEVICE_CAPABILITY. {warning_str}")
+/usr/local/python3.11.15/lib/python3.11/site-packages/flag_gems/utils/device_info.py:58: UserWarning: [device_info] torch_device_fn.get_device_capability returned None for device_id=0, fallback to (0, 0).
+  warnings.warn(
+(EngineCore pid=2685670) `Qwen2VLImageProcessorFast` is deprecated. The `Fast` suffix for image processors has been removed; use `Qwen2VLImageProcessor` instead.
+(EngineCore pid=2685670) 
+Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+(EngineCore pid=2685670) 
+Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00, 18.06it/s]
+(EngineCore pid=2685670) 
+
+Rendering prompts:   0%|          | 0/6 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 6/6 [00:00<00:00, 69.11it/s]
+
+Processed prompts:   0%|          | 0/6 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts:  17%|█▋        | 1/6 [00:00<00:02,  2.05it/s, est. speed input: 10.23 toks/s, output: 16.37 toks/s]
+Processed prompts:  33%|███▎      | 2/6 [00:00<00:01,  3.05it/s, est. speed input: 69.54 toks/s, output: 22.71 toks/s]
+Processed prompts:  50%|█████     | 3/6 [00:00<00:00,  3.62it/s, est. speed input: 68.54 toks/s, output: 26.11 toks/s]
+Processed prompts:  67%|██████▋   | 4/6 [00:01<00:00,  3.97it/s, est. speed input: 62.67 toks/s, output: 28.25 toks/s]
+Processed prompts:  83%|████████▎ | 5/6 [00:01<00:00,  4.22it/s, est. speed input: 63.22 toks/s, output: 29.75 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:01<00:00,  4.37it/s, est. speed input: 63.57 toks/s, output: 30.82 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:01<00:00,  4.37it/s, est. speed input: 63.57 toks/s, output: 30.82 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:01<00:00,  3.85it/s, est. speed input: 63.57 toks/s, output: 30.82 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 1959.04it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.75it/s, est. speed input: 23.75 toks/s, output: 37.99 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.75it/s, est. speed input: 23.75 toks/s, output: 37.99 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.74it/s, est. speed input: 23.75 toks/s, output: 37.99 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2086.72it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.75it/s, est. speed input: 23.77 toks/s, output: 38.03 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.75it/s, est. speed input: 23.77 toks/s, output: 38.03 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.75it/s, est. speed input: 23.77 toks/s, output: 38.03 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2783.21it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.69it/s, est. speed input: 23.44 toks/s, output: 37.49 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.69it/s, est. speed input: 23.44 toks/s, output: 37.49 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.68it/s, est. speed input: 23.44 toks/s, output: 37.49 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 3004.52it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.71it/s, est. speed input: 23.57 toks/s, output: 37.71 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.71it/s, est. speed input: 23.57 toks/s, output: 37.71 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.71it/s, est. speed input: 23.57 toks/s, output: 37.71 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2941.31it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.50it/s, est. speed input: 22.52 toks/s, output: 36.03 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.50it/s, est. speed input: 22.52 toks/s, output: 36.03 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.50it/s, est. speed input: 22.52 toks/s, output: 36.03 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 3160.74it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.67it/s, est. speed input: 23.37 toks/s, output: 37.38 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.67it/s, est. speed input: 23.37 toks/s, output: 37.38 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  4.67it/s, est. speed input: 23.37 toks/s, output: 37.38 toks/s]
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

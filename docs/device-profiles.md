@@ -116,6 +116,11 @@ profile，软件版本用 `scripts/check_env.py` 核对。
 - `nvidia`: profile 就绪；曾借 CUDA 兼容层在加速卡环境验证过
   profile 切换机制（真实 N 卡的 vLLM 引擎路径已备好）
 - `cpu`: transformers 黄金引擎已实测（确定性语义参考）
+- `ascend910`: 历史 SDPA 交付栈（vllm 空壳，kernel/op 层收口）；
+  `ascend910-c2-vllm`: 同硬件真实 vLLM-Ascend C2 栈双 profile
+  （editable vllm + vllm-ascend 源码树，`auto_detect.enabled: false`
+  仅显式选择；C2 证据与环境锁见
+  [environments](environments.md) 与 `ops/*/reports/c2_ascend910.md`）
 
 其他芯片: 复制 `_template.yaml` 填写后即可进入同一体.
 

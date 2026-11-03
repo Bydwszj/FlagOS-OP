@@ -1,0 +1,68 @@
+(EngineCore pid=2636630) `Qwen2VLImageProcessorFast` is deprecated. The `Fast` suffix for image processors has been removed; use `Qwen2VLImageProcessor` instead.
+(EngineCore pid=2636630) 
+Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+(EngineCore pid=2636630) 
+Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00, 16.06it/s]
+(EngineCore pid=2636630) 
+
+Rendering prompts:   0%|          | 0/6 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 6/6 [00:00<00:00, 69.75it/s]
+
+Processed prompts:   0%|          | 0/6 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts:  17%|█▋        | 1/6 [00:00<00:02,  1.76it/s, est. speed input: 8.80 toks/s, output: 14.09 toks/s]
+Processed prompts:  33%|███▎      | 2/6 [00:00<00:01,  2.44it/s, est. speed input: 56.48 toks/s, output: 18.44 toks/s]
+Processed prompts:  50%|█████     | 3/6 [00:01<00:01,  2.79it/s, est. speed input: 54.05 toks/s, output: 20.59 toks/s]
+Processed prompts:  67%|██████▋   | 4/6 [00:01<00:00,  2.99it/s, est. speed input: 48.55 toks/s, output: 21.88 toks/s]
+Processed prompts:  83%|████████▎ | 5/6 [00:01<00:00,  3.12it/s, est. speed input: 48.31 toks/s, output: 22.74 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:02<00:00,  3.20it/s, est. speed input: 48.18 toks/s, output: 23.36 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:02<00:00,  3.20it/s, est. speed input: 48.18 toks/s, output: 23.36 toks/s]
+Processed prompts: 100%|██████████| 6/6 [00:02<00:00,  2.92it/s, est. speed input: 48.18 toks/s, output: 23.36 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2470.14it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.39it/s, est. speed input: 16.93 toks/s, output: 27.08 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.39it/s, est. speed input: 16.93 toks/s, output: 27.08 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.38it/s, est. speed input: 16.93 toks/s, output: 27.08 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2585.88it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.42it/s, est. speed input: 17.12 toks/s, output: 27.40 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.42it/s, est. speed input: 17.12 toks/s, output: 27.40 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.42it/s, est. speed input: 17.12 toks/s, output: 27.40 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 2928.98it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.19 toks/s, output: 27.50 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.19 toks/s, output: 27.50 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.43it/s, est. speed input: 17.19 toks/s, output: 27.50 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 3059.30it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.52 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.52 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.52 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 3371.63it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.51 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.51 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.44it/s, est. speed input: 17.20 toks/s, output: 27.51 toks/s]
+
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]
+Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 3344.74it/s]
+
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.41it/s, est. speed input: 17.05 toks/s, output: 27.28 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.41it/s, est. speed input: 17.05 toks/s, output: 27.28 toks/s]
+Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  3.41it/s, est. speed input: 17.05 toks/s, output: 27.28 toks/s]
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

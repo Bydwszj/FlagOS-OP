@@ -1,0 +1,1 @@
+{"pid": 2634344, "ppid": 2603520, "op": "sdpa_math", "aten": "aten::_scaled_dot_product_attention_math", "run_id": "20261031T012918Z-2603520", "hits": 1, "hit_times": [1793410285.47873], "registered_at": 1793410251.666074, "dump_s": 0.001151, "dumped_at": "2026-10-31T01:31:25Z"}

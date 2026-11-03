@@ -32,6 +32,15 @@ if os.environ.get("FLAGOS_A1_ATEN_INJECT") == "1":
         _root = os.environ.get("FLAGOS_TEMPLATES_ROOT", "")
         if _root and _root not in sys.path:
             sys.path.insert(0, _root)
+        # sitecustomize 启动时 torch_npu 尚未 import，部分算子的
+        # register_a1 会探测 torch.npu.is_available()（如 sdpa_math）。
+        # 此处先确保 torch_npu 已加载，再注册——spawn 子进程启动时
+        # NPU 尚未被 vLLM 初始化，import torch_npu 本身是安全的。
+        try:
+            import torch  # noqa: F401
+            import torch_npu  # noqa: F401
+        except Exception:
+            pass
         import a1_aten_ops
 
         a1_aten_ops.register_all(
@@ -40,6 +49,31 @@ if os.environ.get("FLAGOS_A1_ATEN_INJECT") == "1":
         )
     except Exception:
         pass
+
+# FlagOS C2 引擎侧 attention 后端补丁（sdpa_math × vLLM-Ascend）。
+# FLAGOS_SDPA_MATH_ATTN=1 时，把 NPUPlatform.get_attn_backend_cls 补丁为
+# 返回 FlagOSMathAttentionBackend——真实前向走 aten math 后端（A1 拦截目标），
+# 突破 known-issues #19 的 routing boundary。
+# spawn 子进程启动时 sitecustomize 先于 torch_npu 执行；此处直接尝试
+# import vllm_ascend.platform（PYTHONPATH 已含源码树）并补丁。
+# 若 import 失败则静默，child runner 的兜底补丁会在主进程重试。
+if os.environ.get("FLAGOS_SDPA_MATH_ATTN") == "1":
+    try:
+        import sys as _sys
+
+        _root = os.environ.get("FLAGOS_TEMPLATES_ROOT", "")
+        if _root and _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from ops.sdpa_math.engine.flagos_math_attn import (
+            patch_npu_platform_get_attn_backend_cls,
+        )
+
+        patch_npu_platform_get_attn_backend_cls()
+    except Exception:
+        pass
+
+
+# ---- 以下两段为 thead-ppu C2 显式路径注入（origin/main a158d05 引入）----
 
 # C2 embedding 注入: 真实 vLLM EngineCore 子进程内注册 aten::embedding。
 # 计数写 {A1_EMBEDDING_COUNT_FILE}.{pid}（ops/embedding/register.py）。

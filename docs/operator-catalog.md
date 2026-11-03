@@ -97,7 +97,22 @@ platforms:
   <family-key>:
     profiles: [<已交付 profile>]
     implementation: <实现摘要>
+    evidence:            # 可选；建议所有新登记平台都写（issue #41）
+      level: C0|C1|C2|C2-routing-boundary
+      report: <C2* 必填，仓库内存在的报告路径>
 ```
+
+证据等级语义（与 [docs/testing.md](testing.md) 一致）：
+
+| level | 含义 | 校验 |
+|---|---|---|
+| `C0` | 契约 / 黄金 / 直调 | 可不带 report |
+| `C1` | mini consumer / 等价消费方 | 可不带 report；报告里不得写成完整 vLLM |
+| `C2` | 真实引擎命中目标算子 | **必须** `evidence.report` 且文件存在 |
+| `C2-routing-boundary` | 真实引擎可跑、输出可比，但默认路由未命中该算子 | **必须** `evidence.report` 且文件存在 |
+
+`scripts/build_ops_index.py --check` 会拒绝非法 level、缺失的 C2 report
+和不存在的 report 路径（禁止占位证据）。
 
 foundation 算子还需要顶层 `route`，除非每个平台条目单独声明 `route`。
 算子里的 platform 条目表示已交付声明，必须由该算子的测试和报告支撑。

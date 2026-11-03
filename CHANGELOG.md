@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### Added
+- **catalog 证据等级字段（issue #41）**：`ops/catalog.yaml` 的
+  `platforms.<family>.evidence` 支持 `level`（C0/C1/C2/C2-routing-boundary）
+  与可选 `report`；`scripts/build_ops_index.py` 校验非法 level、C2 缺
+  report 与不存在的 report 路径；生成页平台单元格显示证据等级；
+  [acceptance.md](docs/acceptance.md) 增加 C2 合并门禁清单
+- **sdpa_math 真实 vLLM-Ascend C2 双跑（issue #38）**：
+  `ops/sdpa_math/script/c2_real_vllm_ascend.py` 在 ascend910 上完成
+  baseline/注入双跑（vLLM 0.20.2 + vllm-ascend + SmolLM2-135M），
+  token_ids 逐位一致；A1 probe 命中、真实前向 `forward_hits=0`
+  （`npu_fusion_attention` 路由，known-issues #19）→ 标记
+  `C2-routing-boundary`，证据
+  [reports/c2_ascend910.md](ops/sdpa_math/reports/c2_ascend910.md)；
+  `injection/a1_aten_ops` 增加 `FLAGOS_C2_COUNT_DIR` pid 分片计数
 - **13 个基础 ATen 算子接入 p800-kunlunxin（2026-10-22）**：
   `clone/contiguous/copy_/detach/detach_/dropout/empty/empty_like/
   empty_strided/item/_local_scalar_dense/result_type/type_as` 完成
@@ -69,6 +82,9 @@
   `reference` 遮蔽约束；backend 导入回归测试同步覆盖 P800 与 MLU
 
 ### Fixed
+- **embedding PLATFORM 降级对齐（issue #38）**：`ops/embedding/PLATFORM.md`
+  头部与 §2 由「三平台交付」改为「两平台交付 + ascend910 历史实验」，
+  与 `ops/catalog.yaml` / `ops/README.md` / `REPORT.md` 口径一致
 - 环境与基座索引复核修正：embedding 的 MLU 证据归入匹配的
   `mlu590` 环境锁；PPU 镜像引用补全 Harbor registry / namespace；
   环境锁与镜像 catalog 增加双向关系校验；历史镜像保留稳定文档锚点；
