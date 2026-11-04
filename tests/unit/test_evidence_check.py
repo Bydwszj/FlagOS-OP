@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import textwrap
 from pathlib import Path
@@ -898,4 +899,235 @@ def test_c1_top_level_with_only_c0_records_is_rejected(tmp_path: Path):
     )
     errors = check(tmp_path)
     assert any("evidence=C1 与 profile 记录最高级 C0 不一致" in e
+               for e in errors)
+
+
+# ── PR #46 后续整改：三轴语义（level / verdict / review）+ 派生更正 ──
+
+
+def _write_report(root: Path, rel: str, payload) -> str:
+    """落一份证据文件（str 原样写入，其他按 JSON），返回仓库相对路径。"""
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(payload, str):
+        path.write_text(payload, encoding="utf-8")
+    else:
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    return rel
+
+
+def _write_redecide(
+    root: Path,
+    *,
+    summary_rel: str,
+    declared: str,
+    now: str,
+    sha: str | None = None,
+    commit: str = "a" * 40,
+    rel: str = "reports/acceptance_redecide.json",
+) -> str:
+    """落一份 acceptance_redecide.json（PR #44 口径），返回相对路径。"""
+    if sha is None:
+        sha = hashlib.sha256((root / summary_rel).read_bytes()).hexdigest()
+    payload = {
+        "kind": "c2-acceptance-redecide",
+        "raw_material": {
+            "summary_path": summary_rel,
+            "summary_sha256": sha,
+            "profile_field_original": declared,
+        },
+        "corrections": [{"field": "profile", "was": declared, "now": now}],
+        "redecide": {"commit": commit},
+    }
+    return _write_report(root, rel, payload)
+
+
+def _c2_repo(tmp_path: Path, rel: str, record_extra: dict | None = None,
+             **kwargs) -> Path:
+    """C2 记录 report 指向 rel 的最小仓库（paths 自动包含 rel）。"""
+    record = {"level": "C2", "basis": _C1_BASIS, "report": rel}
+    record.update(record_extra or {})
+    return _make_repo(
+        tmp_path,
+        paths=["evidence.json", rel],
+        records={"demo-1": record},
+        **kwargs,
+    )
+
+
+def test_c2_record_json_status_fail_is_rejected(tmp_path: Path):
+    """阴性：同 profile 但 `status=FAIL` 的报告不能支撑 C2 记录。"""
+    rel = _write_report(tmp_path, "reports/fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    _c2_repo(tmp_path, rel)
+    errors = check(tmp_path)
+    assert any("报告验证状态非通过" in e for e in errors)
+
+
+def test_c2_record_json_collect_only_is_rejected(tmp_path: Path):
+    """阴性：仅采集完成（collect-only）没有实验结论，判定缺失。"""
+    rel = _write_report(tmp_path, "reports/collect.json",
+                        {"profile": "demo-1", "status": "collect-only"})
+    _c2_repo(tmp_path, rel)
+    errors = check(tmp_path)
+    assert any("缺少 status/ok 验证状态字段" in e for e in errors)
+
+
+def test_c2_record_json_without_profile_is_rejected(tmp_path: Path):
+    """阴性：结构化报告缺 profile 字段（无法绑定环境）。"""
+    rel = _write_report(tmp_path, "reports/noprof.json", {"status": "PASS"})
+    _c2_repo(tmp_path, rel)
+    errors = check(tmp_path)
+    assert any("报告缺少 profile 字段" in e for e in errors)
+
+
+def test_c2_record_json_corrupt_is_rejected(tmp_path: Path):
+    """阴性：损坏的 JSON 报告单独报错，不静默放过。"""
+    rel = _write_report(tmp_path, "reports/broken.json", "{ not valid json")
+    _c2_repo(tmp_path, rel)
+    errors = check(tmp_path)
+    assert any("JSON 解析失败" in e for e in errors)
+
+
+def test_c2_record_json_consumer_mismatch_is_rejected(tmp_path: Path):
+    """阴性：记录声明的 consumer 与报告 consumer 不一致。"""
+    rel = _write_report(
+        tmp_path, "reports/cross_consumer.json",
+        {"profile": "demo-1", "status": "PASS",
+         "consumer_type": "other-engine"})
+    _c2_repo(tmp_path, rel, {"consumer": "vllm-enginecore"})
+    errors = check(tmp_path)
+    assert any("与记录 consumer='vllm-enginecore' 不一致" in e
+               for e in errors)
+
+
+def test_record_review_pass_vs_report_pending_is_rejected(tmp_path: Path):
+    """阴性：记录自称已审阅通过，报告 acceptance 仍是待审阅。"""
+    rel = _write_report(
+        tmp_path, "reports/pending.json",
+        {"profile": "demo-1", "status": "PASS",
+         "acceptance": {"status": "complete-pending-review"}})
+    _c2_repo(tmp_path, rel, {"status": "pass"})
+    errors = check(tmp_path)
+    assert any("与报告审阅状态 pending 不一致" in e for e in errors)
+    assert any("待审阅不能写成全量 PASS" in e for e in errors)
+
+
+def test_record_review_pending_matches_report_pending_passes(
+        tmp_path: Path):
+    """阳性：complete-pending-review = verdict 通过 + 待审阅，两侧一致。"""
+    rel = _write_report(
+        tmp_path, "reports/pending.json",
+        {"profile": "demo-1", "c2_status": "c2-hit",
+         "acceptance": {"status": "complete-pending-review"}})
+    _c2_repo(tmp_path, rel, {"status": "complete-pending-review"})
+    assert check(tmp_path) == []
+
+
+def test_record_unknown_review_word_is_rejected(tmp_path: Path):
+    """阴性：记录 status 用未知词（审阅状态不许臆断）。"""
+    rel = _write_report(tmp_path, "reports/ok.json",
+                        {"profile": "demo-1", "status": "PASS"})
+    _c2_repo(tmp_path, rel, {"status": "maybe"})
+    errors = check(tmp_path)
+    assert any("不是已知的审阅状态词" in e for e in errors)
+
+
+def test_c2_record_redecide_corrects_profile_scope(tmp_path: Path):
+    """阳性：报告保留旧 profile，核验通过的 redecide 采用更正范围。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/legacy.json",
+                        {"profile": "legacy-demo", "status": "PASS"})
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel=rel, declared="legacy-demo", now="demo-1")
+    _c2_repo(tmp_path, rel, {"redecide": redecide_rel})
+    assert check(tmp_path) == []
+
+
+def test_c2_record_redecide_bad_sha_is_rejected(tmp_path: Path):
+    """阴性：redecide 记录的源 SHA256 与实际源文件不符。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/legacy.json",
+                        {"profile": "legacy-demo", "status": "PASS"})
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel=rel, declared="legacy-demo", now="demo-1",
+        sha="0" * 64)
+    _c2_repo(tmp_path, rel, {"redecide": redecide_rel})
+    errors = check(tmp_path)
+    assert any("源文件 SHA256 不匹配" in e for e in errors)
+
+
+def test_c2_record_redecide_missing_source_is_rejected(tmp_path: Path):
+    """阴性：redecide 指向的源文件不存在（不能凭更正文件放行）。"""
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel="reports/gone.json",
+        declared="legacy-demo", now="demo-1", sha="0" * 64)
+    _c2_repo(tmp_path, "evidence.json", {"redecide": redecide_rel})
+    errors = check(tmp_path)
+    assert any("raw_material.summary_path 不存在: reports/gone.json" in e
+               for e in errors)
+
+
+def test_c2_record_redecide_bad_commit_is_rejected(tmp_path: Path):
+    """阴性：redecide.commit 不是 40 位 commit。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/legacy.json",
+                        {"profile": "legacy-demo", "status": "PASS"})
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel=rel, declared="legacy-demo", now="demo-1",
+        commit="not-a-commit")
+    _c2_repo(tmp_path, rel, {"redecide": redecide_rel})
+    errors = check(tmp_path)
+    assert any("redecide.commit 不是 40 位 commit" in e for e in errors)
+
+
+def test_lock_evidence_json_backed_by_verified_redecide_passes(
+        tmp_path: Path):
+    """阳性：锁证据 JSON 声明旧 profile，但记录的 redecide 核验通过。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/legacy.json",
+                        {"profile": "legacy-demo", "status": "PASS"})
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel=rel, declared="legacy-demo", now="demo-1")
+    _c2_repo(
+        tmp_path, rel, {"redecide": redecide_rel},
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（更正后的范围）"],
+            evidence=[{"path": rel, "note": "旧 profile 的结构化报告"}],
+        ),
+    )
+    assert check(tmp_path) == []
+
+
+def test_lock_evidence_json_redecide_bad_sha_is_rejected(tmp_path: Path):
+    """阴性：锁证据侧的 redecide 源哈希不符，既报错也不能成为支撑。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/legacy.json",
+                        {"profile": "legacy-demo", "status": "PASS"})
+    redecide_rel = _write_redecide(
+        tmp_path, summary_rel=rel, declared="legacy-demo", now="demo-1",
+        sha="0" * 64)
+    _c2_repo(
+        tmp_path, rel, {"redecide": redecide_rel},
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（坏哈希不能背书）"],
+            evidence=[{"path": rel, "note": "源哈希不符"}],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("派生更正核验失败" in e and "SHA256 不匹配" in e
+               for e in errors)
+    assert any("没有对应报告支撑" in e for e in errors)
+
+
+def test_lock_c2_scope_backed_by_collect_only_json_is_rejected(
+        tmp_path: Path):
+    """阴性：仅采集完成的 JSON 不能支撑锁的 C2 声明。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/collect.json",
+                        {"profile": "demo-1", "status": "collect-only"})
+    _make_repo(
+        tmp_path,
+        paths=["evidence.json", rel],
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（只采了数据）"],
+            evidence=[{"path": rel, "note": "collect-only 报告"}],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("支撑报告不合格" in e and "缺少 status/ok" in e
                for e in errors)
