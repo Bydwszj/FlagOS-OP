@@ -63,7 +63,7 @@ def test_generated_ops_index_shows_profile_scoped_evidence():
     assert "thead-ppu-c2 C2" in text
     assert "p800-kunlunxin C1" in text
     # 证据列给出按 profile 的明细，而不是单独一个无范围 C2
-    assert "C2（p800-kunlunxin-gems5 · thead-ppu-c2）" in text
+    assert "C2（ascend910-c2-vllm · p800-kunlunxin-gems5 · thead-ppu-c2）" in text
     # 按真实 consumer 证据回填后，empty/detach_/result_type 停在 C0
     assert "C0（cambricon · p800-kunlunxin）" in text
 

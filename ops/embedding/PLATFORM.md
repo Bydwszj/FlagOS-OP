@@ -1,10 +1,13 @@
 # 平台绑定清单（Platform Binding）— embedding
 
-> 当前交付包含四个平台：**ascend910**（厂商委托：index_select 同源
-> err=0 + dense_backward 委托）、**p800-kunlunxin**（厂商委托同构，
+> 当前交付包含四个平台：**p800-kunlunxin**（厂商委托同构，
 > gatherFIX 探针见 reports/）、**cambricon**（MLU590，Autograd key
-> 注册——见 reports/cambricon.md §4）与 **thead-ppu**（平头哥 PPU
-> ZW810E，CUDA 兼容层——见 reports/thead-ppu.md）。
+> 注册——见 reports/cambricon.md §4）、**thead-ppu**（平头哥 PPU
+> ZW810E，CUDA 兼容层——见 reports/thead-ppu.md）与 **ascend910**
+> （C2：真实 vLLM-Ascend 前向命中 `aten::embedding` 97 次，2026-10-31
+> 复跑 @ `1dc1d8c`，验收状态 complete-pending-review（待审阅）——见 §2
+> 与 `reports/c2_ascend910.md`；C0/C1 三层/黄金为 2026-09-30 历史记录）。
+> 口径与 `ops/catalog.yaml` / `ops/README.md` / `REPORT.md` 一致（issue #38）。
 > 本文件记录不可凭直觉搬运的绑定结论；跨平台移植时逐项重验，不要把
 > 单平台实验结果当成普适行为。
 
@@ -18,11 +21,25 @@
 | 三层测试、性能脚本 | `test/`、`script/`（`EMBEDDING_PROFILE` 切平台） |
 | A1 autograd.Function 包装 | `register.py`（`_BACKENDS` 选择器 + `_DEVICE_PROBE` 守卫） |
 
-## 2. ascend910 绑定（厂商委托）
+## 2. ascend910 绑定（C2 归属 profile `ascend910-c2-vllm`，C0/C1 为历史实验）
+
+> **C2 证据（issue #38，2026-10-31 复跑 @ `1dc1d8c`，profile
+> `ascend910-c2-vllm`；2026-11-01 判定器修复后离线重判仍
+> complete-pending-review / exit 0，见
+> [reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)）**：真实 vLLM-Ascend
+> 双跑，EngineCore 前向命中 `aten::embedding` **97 次** = 1 次引擎初始化
+> dummy/profile 前向（`skip_attn`，仍执行 embed_tokens）+ 48 次 correctness
+> 前向（6 prompt × 8）+ 8 次 warmup + 40 次 measured（阶段归因自洽），
+> token_ids 与基线**逐位一致**（C1 恒等 6/6、prompt logprob 0.0），
+> 性能门禁 inject/baseline 中位数比 0.94 OK，主进程/辅助进程 0 命中
+> （按 pid 角色标注，防串算）；验收状态 complete-pending-review（待审阅）。
+> 见 [reports/c2_ascend910.md](reports/c2_ascend910.md)。
+> 下表绑定结论来自 2026-09-30 的 C0/C1 实验（dev profile `ascend910`
+> 历史范围），移植时逐项重验。
 
 | 绑定项 | 实测结论 |
 |---|---|
-| A1 拦截 key | **AutogradPrivateUse1**（PrivateUse1 永不命中——sdpa 开发报告 §3.1 dispatch 证据链同结论） |
+| A1 拦截 key | 训练/autograd 路径 **AutogradPrivateUse1**（`PrivateUse1` 在 autograd 路径被 vllm_ascend 注册冲突拒绝）；**推理（no_grad）路径 dispatch 到 PrivateUse1**——C2 引擎证据即用此 key 实证命中（两者按路径区分，见 reports/c2_ascend910.md §4） |
 | aten 签名坑 | `aten::embedding_dense_backward` **5 参无 sparse**（与 Python 层 6 参不同） |
 | autograd.Function | staticmethod 读模块全局 → `register_a1` 里 `global` 全部三变量（PLATFORM/embedding/embedding_backward） |
 | 同步 API | `torch.npu.synchronize`（非 cuda）；`kernel/platform.py::synchronize` 已平台化 |

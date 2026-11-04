@@ -1,0 +1,76 @@
+# Ascend 910 真实 vLLM-Ascend C2 栈环境锁定（2026-10-30 C2 实测采集）
+#
+# 用途: 真实 vLLM-Ascend C2 栈的环境核对
+#       python3 scripts/check_env.py --device ascend910-c2-vllm
+#       （历史 dev 基座锁仍在 ascend910.lock.yaml——当时 vllm 为空壳；
+#        双 profile 先例: thead-ppu / thead-ppu-c2、p800-kunlunxin{,-gems5}）
+# wt-2026-10-30-fix  wt <31944766+TruNcat3@users.noreply.github.com>
+name: ascend910-c2-vllm
+schema: 1
+description: Ascend 910 真实 vLLM-Ascend C2 栈（editable vllm + vllm-ascend 源码树）实测版本
+collected_at: "2026-10-30"
+hardware_collected_at: "2026-10-30"
+family: ascend
+scope:
+  - ops/embedding C2（真实 vLLM EngineCore 消费 aten::embedding）
+  - ops/sdpa_math C2（真实 vLLM EngineCore 经 FlagOSMathAttentionBackend
+    显式 MATH 路径消费 aten::_scaled_dot_product_attention_math）
+hardware:
+  model: Ascend 910（910_9382 同代）
+  count: 16
+  memory_per_device: 64 GB HBM
+  runtime: "CANN 9.0.0（V100R001C10SPC001B250）"
+  monitoring: "npu-smi"
+  visible_device: "容器内 16 卡全见；C2 实测用卡 0（其余卡他租户占用勿动）"
+system:
+  os: Linux
+  kernel: "5.10.0-216"
+python: "3.11.15"
+packages:
+  torch: "2.10.0+cpu"
+  torch_npu: "2.10.0"
+  # triton-ascend 源码树安装、无 dist-info——check_env 的发行包元数据
+  # 探测报「未安装」（与历史 ascend910.lock.yaml 同型已知限制），
+  # import triton.__version__ 实测 3.5.1。
+  triton: "3.5.1"
+  flag_gems: "5.3.5"
+  vllm: "0.20.2+empty"
+  transformers: "5.5.3"
+vllm_ascend:
+  version: "source"
+  path: /vllm-workspace/vllm-ascend
+  git_commit: "367b8e62"
+  git_dirty: true
+  dirty_files:
+    - "M csrc/utils/inc/kernel/moe_distribute_base.h"
+    - "?? csrc/build_out/"
+vllm_source:
+  path: /vllm-workspace/vllm
+  git_commit: "bc150f5"
+  git_dirty: false
+  install: editable
+  version: "0.20.2+empty"
+notes: |-
+  与历史 ascend910.lock.yaml（2026-09-16, vllm 空壳、框架级入口不可用）
+  的关键差异: 本栈 vllm 为 editable 安装（/vllm-workspace/vllm @ bc150f5
+  clean），并有 vllm-ascend 源码树（@367b8e62，M csrc/utils/inc/kernel/
+  moe_distribute_base.h + untracked csrc/build_out/——采集时如实记录，
+  非本仓库可控）作为真实框架入口；VLLM_PLUGINS=ascend。
+  C2 harness 要求 VLLM_WORKER_MULTIPROC_METHOD=spawn（fork 后 torch.npu
+  再初始化失败）；enforce_eager=True 禁 graph replay 绕过 Python 路径。
+  flag_gems 5.3.5 已安装但 C2 harness 未启用（范围 = torch 组合实现，
+  非 Triton/FlagGems kernel 对照）。
+  模型权重: HuggingFaceTB/SmolLM2-135M 快照
+  93efa2f097d58c2a74874c7e644dbc9b0cee75a2（HF cache 内，不在镜像内）。
+  卡况（2026-10-30 快照）: C2 用卡 0；1-5 等他租户占用。
+evidence:
+  - path: ops/sdpa_math/reports/c2_ascend910/summary.json
+    note: sdpa_math C2 三跑（baseline/baseline_math/inject）摘要
+  - path: ops/embedding/reports/c2_ascend910/summary.json
+    note: embedding C2 双跑摘要
+  - path: ops/sdpa_math/reports/c2_ascend910.md
+    note: sdpa_math C2 叙述报告
+  - path: ops/embedding/reports/c2_ascend910.md
+    note: embedding C2 叙述报告
+  - path: ops/sdpa_math/reports/perf_compare_ascend910_20261030.md
+    note: 算子级性能回归对比（ops.sdpa_math.* 对基线 OK；embedding NEW 未入基线，同文另存 ops/embedding/reports/）

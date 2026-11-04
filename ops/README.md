@@ -35,7 +35,7 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 
 | 目标平台 | 当前状态 | 已登记算子 | 当前 profile / 型号 |
 |---|---|---:|---|
-| 华为昇腾（`ascend`） | 部分交付 | 2 | `ascend910` |
+| 华为昇腾（`ascend`） | 部分交付 | 3 | `ascend910` · `ascend910-c2-vllm` |
 | 寒武纪（`cambricon`） | 部分交付 | 15 | `cambricon` · `mlu590` |
 | 昆仑芯（`kunlunxin`） | 部分交付 | 16 | `p800-kunlunxin` · `p800-kunlunxin-gems5` |
 | 平头哥（`thead`） | 部分交付 | 3 | `thead-ppu` · `thead-ppu-c2` |
@@ -49,8 +49,8 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 | 算子 | 作用 | 平台 | 证据 | 关键结论 |
 |---|---|---|---|---|
 | [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910 C1） · 昆仑芯（p800-kunlunxin C1） · 寒武纪（mlu590 C1） · 平头哥（thead-ppu C1） | C1（ascend910 · p800-kunlunxin · mlu590 · thead-ppu） | 四平台黄金覆盖 397/397。 |
-| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 C1） · 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2） | C2（p800-kunlunxin-gems5 · thead-ppu-c2） / C1（ascend910 · p800-kunlunxin · thead-ppu） | 五份实现通过同一组 175 例黄金数据。 |
-| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 寒武纪（cambricon C1） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2） | C2（p800-kunlunxin-gems5 · thead-ppu-c2） / C1（p800-kunlunxin · cambricon · thead-ppu） | 已在三个当前厂商平台交付；MLU/PPU 侧具备逐位覆盖，Ascend 结果保留为历史实验。 |
+| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 C1 / ascend910-c2-vllm C2·complete-pending-review） · 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2·PASS） | C2（ascend910-c2-vllm · p800-kunlunxin-gems5 · thead-ppu-c2） / C1（ascend910 · p800-kunlunxin · thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
+| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 C1 / ascend910-c2-vllm C2·complete-pending-review） · 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 寒武纪（cambricon C1） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2·PASS） | C2（ascend910-c2-vllm · p800-kunlunxin-gems5 · thead-ppu-c2） / C1（ascend910 · p800-kunlunxin · cambricon · thead-ppu） | 已在三个当前厂商平台交付；MLU/PPU 侧具备逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md），Ascend dev 结果保留为历史实验。 |
 
 ## 基础 ATen 算子
 
@@ -151,9 +151,10 @@ register_a1(
 - **多平台算子**必须维护 `PLATFORM.md`；涉及平台合并流程时维护 `MERGE.md`。
 - **平台结论限定范围**：dtype、shape、dispatch key、运行时版本和
   fallback 边界写在同一份证据链里。
-- **证据等级按 profile 记录**：`platforms.<family>.evidence.profiles`
-  是证据的最小单位（level/basis/report），顶层 `evidence` 只是这些
-  记录的派生汇总；单个 family 下多个 profile 不共享未区分的等级。
+- **证据等级按 profile 记录**：`platforms.<family>.evidence` 是
+  逐 profile 记录列表（`- profile: <profile>` + level/basis/report
+  /status），顶层 `evidence` 只是这些记录的派生汇总；单个 family
+  下多个 profile 不共享未区分的等级。
 - **包态导入**统一使用 `from ops.<operator> import register_a1`；脚本态
   仅作为单算子目录内运行的兼容模式。
 - CI 的 `ops-packaging` 是 CPU 包入口扫描；`ops/test_packaging.py` 是

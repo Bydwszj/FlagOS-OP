@@ -23,6 +23,23 @@
 - 与 sdpa 全量版的关系：本算子是 `_scaled_dot_product_math` 的
   exact-P 分解路线；形状路由建议沿用 sdpa `kernel/auto_dispatch.py`
   的截流范式（大 S 走原生）
+- **C2（vLLM-Ascend，profile `ascend910-c2-vllm`）**（issue #38，
+  2026-10-31 复跑 @ `1dc1d8c`；2026-11-01 判定器修复后离线重判
+  仍 `complete-pending-review` / exit 0，见
+  [reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)）:
+  **c2-hit / complete-pending-review（待审阅，不写「C2 成立」）**——
+  引擎侧 `FLAGOS_SDPA_MATH_ATTN=1` 补丁
+  `NPUPlatform.get_attn_backend_cls` 返回 `FlagOSMathAttentionBackend` 后，
+  EngineCore 真实前向命中 `aten::_scaled_dot_product_attention_math`
+  2880 次（correctness 1440 + warmup 240 + measured 1200，阶段归因自洽）；
+  同路径（baseline_math vs inject）C1 恒等 6/6 位级一致、prompt logprob
+  max|Δ|=0.17 nats（<0.5 失效线）、性能门禁 inject/baseline_math 中位数比
+  1.06 OK。与原生 `npu_fusion_attention` 的路径差（5/6 描述性对照）为
+  数值精度差，如实单列、不豁免任何判据。
+  **无补丁时默认路由仍为 `npu_fusion_attention`（forward_hits=0，
+  known-issues #19）**。详见 [reports/c2_ascend910.md](reports/c2_ascend910.md)
+  （含 attention 几何修复: query 累计端点切分 + 历史偏移 causal mask，
+  CPU 回归 `tests/unit/test_flagos_math_attn_geometry.py`）。
 
 ## 3. p800-kunlunxin 绑定
 

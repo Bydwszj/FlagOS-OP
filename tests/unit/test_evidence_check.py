@@ -27,7 +27,6 @@ def _make_repo(
     profiles: list[str] | None = None,
     declared: list[str] | None = None,
     records: dict | None = None,
-    family_evidence_level: str | None = None,
 ) -> Path:
     """搭一个最小可过的 demo 仓。
 
@@ -35,8 +34,9 @@ def _make_repo(
       每个 declared profile 默认生成一条与顶层 `evidence` 同级的记录，
       C1/C2 记录自动带 `basis`，C2 记录 `report` 指向 `evidence.json`
       （内容声明该 profile 与 PASS 状态）；
-    - `records`：整体替换 `evidence.profiles` 映射（不写报告文件，
-      需要时测试自行落盘）；
+    - `records`：整体替换 `platforms.demo.evidence`（**逐 profile
+      记录列表**，每条带 `profile`；不写报告文件，需要时测试自行
+      落盘）；
     - `profiles`：额外创建的 `configs/devices` profile。
     """
     paths = ["evidence.json"] if paths is None else paths
@@ -69,11 +69,10 @@ def _make_repo(
         "platforms": {
             "demo": {
                 "profiles": declared,
-                "evidence": {
-                    "profiles": records,
-                    **({"level": family_evidence_level}
-                       if family_evidence_level is not None else {}),
-                },
+                "evidence": [
+                    dict(records[p], profile=p)
+                    for p in declared if p in records
+                ],
             },
         },
     }
@@ -419,8 +418,8 @@ def test_missing_profile_record_is_rejected(tmp_path: Path):
     assert any("profile demo-2 缺独立证据记录" in e for e in errors)
 
 
-def test_missing_family_evidence_profiles_is_rejected(tmp_path: Path):
-    """阴性：family 完全没有 evidence.profiles 记录（旧 schema）。"""
+def test_missing_family_evidence_records_is_rejected(tmp_path: Path):
+    """阴性：family 完全没有逐 profile 证据记录（旧 schema）。"""
     _make_repo(tmp_path)
     catalog_path = tmp_path / "ops" / "catalog.yaml"
     catalog = yaml.safe_load(catalog_path.read_text())
@@ -428,7 +427,7 @@ def test_missing_family_evidence_profiles_is_rejected(tmp_path: Path):
     catalog_path.write_text(
         yaml.safe_dump(catalog, allow_unicode=True), encoding="utf-8")
     errors = check(tmp_path)
-    assert any("缺 evidence.profiles" in e for e in errors)
+    assert any("缺逐 profile 证据记录" in e for e in errors)
 
 
 def test_top_level_evidence_must_be_derived_from_records(tmp_path: Path):
@@ -442,21 +441,23 @@ def test_top_level_evidence_must_be_derived_from_records(tmp_path: Path):
     assert any("与 profile 记录最高级 C1 不一致" in e for e in errors)
 
 
-def test_family_level_field_must_be_derived_from_records(tmp_path: Path):
-    """阴性：PR44 兼容的 family 汇总字段与记录不一致。"""
-    _make_repo(
-        tmp_path,
-        records={"demo-1": {"level": "C1", "basis": _C1_BASIS}},
-        family_evidence_level="C2",
-    )
-    # 顶层 evidence 仍为默认 C2 → 先触发派生不一致；再把顶层调成 C1
+def test_nested_evidence_profiles_form_is_rejected(tmp_path: Path):
+    """阴性：已停用的嵌套 `evidence.profiles` 形态必须报错。
+
+    逐 profile 记录列表是唯一来源；嵌套形态会让多个环境共享未区分
+    的等级（PR44 时代就是在这里出的洞），故直接拒绝而不是兼容读取。
+    """
+    _make_repo(tmp_path)
     catalog_path = tmp_path / "ops" / "catalog.yaml"
     catalog = yaml.safe_load(catalog_path.read_text())
-    catalog["operators"][0]["evidence"] = "C1"
+    catalog["operators"][0]["platforms"]["demo"]["evidence"] = {
+        "profiles": {"demo-1": {"level": "C2", "basis": _C1_BASIS,
+                                "report": "evidence.json"}},
+    }
     catalog_path.write_text(
         yaml.safe_dump(catalog, allow_unicode=True), encoding="utf-8")
     errors = check(tmp_path)
-    assert any("家族汇总必须由记录派生" in e for e in errors)
+    assert any("嵌套形态已停用" in e for e in errors)
 
 
 def test_c2_record_report_declaring_other_profile_is_rejected(

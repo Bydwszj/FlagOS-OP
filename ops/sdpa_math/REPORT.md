@@ -3,9 +3,23 @@
 > **职责与证据等级**：本页是当前验证矩阵；`README.md` 负责使用入口，
 > `PLATFORM.md` 负责平台绑定，`reports/` 保存带日期的实验和原始数据。
 > 当前为 Ascend910/P800/thead-ppu 三个硬件交付，CPU 仅作 ATen 对照。FlagOS E2E 使用
-> mini-LLM harness，不等同于真实 vLLM；**已补两处真实 vLLM C2**——thead-ppu-c2 显式
-> MATH 路径（见 [reports/thead-ppu-c2.md](reports/thead-ppu-c2.md)）与
-> **2026-10-29 P800 5.0 栈**（下表「真实 vLLM C2」行，issue #39；4.2 栈待复验）。
+> mini-LLM harness（C1），不等同于真实 vLLM；**已补三处真实 vLLM C2**：
+> thead-ppu-c2 显式 MATH 路径（见 [reports/thead-ppu-c2.md](reports/thead-ppu-c2.md)）、
+> **2026-10-29 P800 5.0 栈**（下表「真实 vLLM C2」行，issue #39；4.2 栈待复验）
+> 与 **2026-10-31 Ascend vLLM-Ascend 栈**（profile `ascend910-c2-vllm`）：
+> 同路径三跑 @ `1dc1d8c`、EngineCore 真实前向命中 math 后端
+> 2880 次（correctness/warmup/measured 阶段分解），`baseline = 同 MATH 路径
+> 无 A1` 的 C1 恒等 6/6 位级一致、prompt logprob max|Δ|=0.17 nats（<0.5
+> 失效线）、性能门禁 inject/baseline_math 中位数比 1.06 OK（相对原生
+> 注意力 1.2876，描述性）——
+> **验收状态 complete-pending-review（证据已采集、待审阅，不写「C2 成立」）**，
+> 2026-11-01 判定器修复后离线重判仍 exit 0
+> （[reports/c2_ascend910/acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json)），
+> 详见 [reports/c2_ascend910.md](reports/c2_ascend910.md)。
+> 与 native 路径的输出差异为路径差（数值精度差），按预注册口径记录
+> （5/6 描述性对照、teacher-forced prompt logprob、首分歧位置），
+> 不豁免任何判据。
+> 无补丁时的真实路由仍为 `npu_fusion_attention`（known-issues #19）。
 
 > 定位: 一页看全一个算子——实现矩阵、验证矩阵、关键数字。
 > 分册在 [reports/](reports/)。
@@ -47,6 +61,7 @@ thead fast 均过同一 175 组黄金。
 | FlagOS E2E | `python3 script/e2e_flagos.py --device cuda:1` | ☑ 4 层 mini-LLM · forward/backward/generate · A1 拦截 856 | [reports/e2e_flagos_p800-kunlunxin.json](reports/e2e_flagos_p800-kunlunxin.json) |
 | **真实 vLLM C2** | `python3 script/e2e_vllm_c2.py --model ... --model-impl transformers` | ☑ EngineCore 内 MATH 路径命中 20 · token 与同路径基线一致 · profile `thead-ppu-c2` | [reports/e2e_vllm_c2_thead-ppu-c2.json](reports/e2e_vllm_c2_thead-ppu-c2.json) · [reports/thead-ppu-c2.md](reports/thead-ppu-c2.md) |
 | **真实 vLLM C2（p800 5.0，2026-10-29）** | `tests/framework_level/test_a1_aten_ops.py`（`FLAGOS_A1_OPS=embedding,sdpa_math`） | ☑ 1 passed；等价消费者（真实 prefill 注意力→A1 private math）命中 9（真实消费 8）· 注入前后 token 逐位一致 · 概率图行和偏差 9.9e-3 · 梯度 probe 对 CPU fp64 参照 max_abs≤0.016（issue #39，4.2 侧待复验） | [evidence json](../../tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json) · [框架级 README](../../tests/framework_level/README.md) |
+| **真实 vLLM C2（ascend910，2026-10-31）** | `ops/sdpa_math/script/c2_real_vllm_ascend.py --mode accept`（profile `ascend910-c2-vllm`） | ☑ 同路径三跑 token 6/6 位级一致 · MATH 路径命中 2880 · prompt logprob max\|Δ\|=0.17 nats · 性能比 1.06 OK · **验收状态 complete-pending-review（证据已采集、待审阅，不写「C2 成立」）** | [reports/c2_ascend910.md](reports/c2_ascend910.md) · [acceptance_redecide.json](reports/c2_ascend910/acceptance_redecide.json) |
 
 ## 关键数字
 

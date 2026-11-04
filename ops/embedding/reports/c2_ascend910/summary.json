@@ -1,0 +1,1082 @@
+{
+  "schema": 3,
+  "date": "2026-10-31T01:33:51Z",
+  "profile": "ascend910",
+  "engine": "vllm-ascend",
+  "commit": "1dc1d8c12da9b6ff7d4b2b409bd6dddc97443a43",
+  "run_id": "20261031T013206Z-2663709",
+  "model": "/root/.cache/huggingface/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "prompts": [
+    "The capital of France is",
+    "def fibonacci(n):\n    if n < 2:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nprint(fibonacci(10)) #",
+    "Once upon a time, in a land far away, there lived a",
+    "Water boils at 100 degrees",
+    "2 + 2 = 4, 3 + 3 =",
+    "The quick brown fox jumps over the lazy dog. The quick brown fox"
+  ],
+  "max_tokens": 8,
+  "python": "3.11.15",
+  "injection": {
+    "mp_method": "spawn",
+    "a1_ops": "embedding",
+    "a1_dispatch_key": "PrivateUse1",
+    "a1_impl": null,
+    "a1_reg_info": {
+      "impl_requested": null,
+      "impl_applied": false,
+      "counter_requested": true,
+      "counter_passed": true
+    }
+  },
+  "controls": {
+    "note": "两组共用同一模型/权重快照/prompt 集/采样参数(温度0)/dtype/enforce_eager/engine 配置；调用链完全同构，唯一变量 = 是否注册 FlagOS A1 embedding 实现",
+    "modes": [
+      "baseline",
+      "inject"
+    ],
+    "warmup": 1,
+    "repeats": 5,
+    "env_overrides_inject": [
+      "FLAGOS_A1_ATEN_INJECT=1",
+      "FLAGOS_A1_OPS=embedding",
+      "A1_DISPATCH_KEY=PrivateUse1",
+      "FLAGOS_C2_RUN_ID=<run_id>",
+      "FLAGOS_A1_IMPL=<unset — embedding register_a1 不接受 impl>"
+    ],
+    "env_cleared_all_modes": [
+      "FLAGOS_A1_ATEN_INJECT",
+      "FLAGOS_A1_OPS",
+      "FLAGOS_C2_COUNT_DIR",
+      "A1_DISPATCH_KEY",
+      "FLAGOS_SDPA_MATH_ATTN",
+      "FLAGOS_A1_IMPL"
+    ]
+  },
+  "baseline": {
+    "mode": "baseline",
+    "ok": true,
+    "pid": 2663725,
+    "ppid": 2663709,
+    "run_id": "20261031T013206Z-2663709",
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "npu_available": true,
+    "npu_count": 16,
+    "mp_method": "spawn",
+    "a1_inject": "0",
+    "a1_impl_env": null,
+    "vllm": "0.20.2",
+    "vllm_ascend": "source",
+    "vllm_ascend_file": "/vllm-workspace/vllm-ascend/vllm_ascend/__init__.py",
+    "init_s": 24.02,
+    "correctness_s": 1.63,
+    "outputs": [
+      {
+        "prompt_idx": 0,
+        "prompt": "The capital of France is",
+        "token_ids": [
+          260,
+          2240,
+          282,
+          7042,
+          30,
+          657,
+          314,
+          260
+        ],
+        "text": " the city of Paris. It is the"
+      },
+      {
+        "prompt_idx": 1,
+        "prompt": "def fibonacci(n):\n    if n < 2:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nprint(fibonacci(10)) #",
+        "token_ids": [
+          216,
+          33,
+          32,
+          198,
+          3272,
+          24,
+          38572,
+          46477
+        ],
+        "text": " 10\nprint(fibonacci"
+      },
+      {
+        "prompt_idx": 2,
+        "prompt": "Once upon a time, in a land far away, there lived a",
+        "token_ids": [
+          9357,
+          1573,
+          23142,
+          3365,
+          492,
+          764,
+          519,
+          30
+        ],
+        "text": " wise old owl named Ollie."
+      },
+      {
+        "prompt_idx": 3,
+        "prompt": "Water boils at 100 degrees",
+        "token_ids": [
+          20590,
+          28,
+          284,
+          260,
+          913,
+          36411,
+          418,
+          216
+        ],
+        "text": " Celsius, and the water boils at "
+      },
+      {
+        "prompt_idx": 4,
+        "prompt": "2 + 2 = 4, 3 + 3 =",
+        "token_ids": [
+          216,
+          38,
+          28,
+          216,
+          34,
+          1232,
+          216,
+          34
+        ],
+        "text": " 6, 2 + 2"
+      },
+      {
+        "prompt_idx": 5,
+        "prompt": "The quick brown fox jumps over the lazy dog. The quick brown fox",
+        "token_ids": [
+          27003,
+          690,
+          260,
+          23790,
+          2767,
+          30,
+          198,
+          198
+        ],
+        "text": " jumps over the lazy dog.\n\n"
+      }
+    ],
+    "prompt_logprobs": {
+      "0": {
+        "1": -8.226740837097168,
+        "2": -0.8253197073936462,
+        "3": -5.2279510498046875,
+        "4": -1.131880283355713
+      },
+      "1": {
+        "1": -9.863152503967285,
+        "2": -0.9983591437339783,
+        "3": -0.6416823267936707,
+        "4": -0.7285494208335876,
+        "5": -0.6597294211387634,
+        "6": -0.49693763256073,
+        "7": -0.9737597703933716,
+        "8": -0.11420406401157379,
+        "9": -1.7832145690917969,
+        "10": -0.012616579420864582,
+        "11": -0.9987544417381287,
+        "12": -0.026164118200540543,
+        "13": -0.06372889131307602,
+        "14": -0.050354283303022385,
+        "15": -0.17431633174419403,
+        "16": -0.35316556692123413,
+        "17": -1.0128569602966309,
+        "18": -0.05393194034695625,
+        "19": -0.011099145747721195,
+        "20": -0.0018170052208006382,
+        "21": -0.007709155790507793,
+        "22": -1.2262530326843262,
+        "23": -0.3156965970993042,
+        "24": -0.05183926597237587,
+        "25": -0.002577199600636959,
+        "26": -0.008104770444333553,
+        "27": -2.884823152271565e-05,
+        "28": -0.0002127659390680492,
+        "29": -0.0005893162451684475,
+        "30": -0.004305854439735413,
+        "31": -9.703165414975956e-05,
+        "32": -0.0012411518255248666,
+        "33": -0.5493088960647583,
+        "34": -0.3120810389518738,
+        "35": -1.0989595651626587,
+        "36": -0.38206353783607483,
+        "37": -0.061180178076028824,
+        "38": -0.012639769352972507,
+        "39": -0.009107593446969986,
+        "40": -1.0846093893051147,
+        "41": -0.33432236313819885,
+        "42": -0.173439621925354,
+        "43": -3.1765618324279785
+      },
+      "2": {
+        "1": -7.365015983581543,
+        "2": -0.0041435821913182735,
+        "3": -0.14280541241168976,
+        "4": -0.24937333166599274,
+        "5": -1.7425497770309448,
+        "6": -0.6909805536270142,
+        "7": -0.8414973616600037,
+        "8": -0.11190120130777359,
+        "9": -0.33676645159721375,
+        "10": -0.2817420959472656,
+        "11": -0.23048235476016998,
+        "12": -0.6500306725502014,
+        "13": -0.5611892342567444
+      },
+      "3": {
+        "1": -12.118914604187012,
+        "2": -2.2794644832611084,
+        "3": -1.0885552167892456,
+        "4": -1.6134028434753418,
+        "5": -0.407947301864624,
+        "6": -0.0985785573720932,
+        "7": -1.0547149181365967
+      },
+      "4": {
+        "1": -6.674912929534912,
+        "2": -0.8934631943702698,
+        "3": -1.5924986600875854,
+        "4": -3.279254913330078,
+        "5": -0.1673019379377365,
+        "6": -2.012434720993042,
+        "7": -2.982046365737915,
+        "8": -2.1848108768463135,
+        "9": -1.7571362257003784,
+        "10": -1.0597968101501465,
+        "11": -0.02451532892882824,
+        "12": -1.895517349243164,
+        "13": -0.12016607820987701
+      },
+      "5": {
+        "1": -8.664240837097168,
+        "2": -6.362853527069092,
+        "3": -0.011729440651834011,
+        "4": -1.551236629486084,
+        "5": -0.07587137818336487,
+        "6": -0.053710419684648514,
+        "7": -0.2667359709739685,
+        "8": -0.15758460760116577,
+        "9": -1.8890221118927002,
+        "10": -3.3577332496643066,
+        "11": -1.3464614152908325,
+        "12": -0.08649461716413498,
+        "13": -0.10805565863847733
+      }
+    },
+    "perf": {
+      "warmup": 1,
+      "repeats": 5,
+      "samples_s": [
+        0.2068,
+        0.2068,
+        0.2271,
+        0.2324,
+        0.2319
+      ],
+      "stats_s": {
+        "mean": 0.221,
+        "median": 0.2271,
+        "p95": 0.2324,
+        "min": 0.2068,
+        "max": 0.2324,
+        "stdev": 0.0117
+      }
+    },
+    "phases": {
+      "setup": {
+        "start": 1793410326.999012,
+        "end": 1793410331.825706
+      },
+      "init": {
+        "start": 1793410336.505908,
+        "end": 1793410360.524845
+      },
+      "correctness": {
+        "start": 1793410360.524852,
+        "end": 1793410362.153684
+      },
+      "warmup": {
+        "start": 1793410362.153721,
+        "end": 1793410362.361779
+      },
+      "measured": {
+        "start": 1793410362.361783,
+        "end": 1793410363.466701
+      }
+    },
+    "main_counter_snapshots": {},
+    "main_counter_scope": "仅本进程（child runner）A1 计数快照；引擎子进程计数须读 FLAGOS_C2_COUNT_DIR 下的 *_hits_<pid>.json 并按 hit_times 归阶段",
+    "rc": 0,
+    "wall_s": 43.74
+  },
+  "inject": {
+    "mode": "inject",
+    "ok": true,
+    "pid": 2680213,
+    "ppid": 2663709,
+    "run_id": "20261031T013206Z-2663709",
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "npu_available": true,
+    "npu_count": 16,
+    "mp_method": "spawn",
+    "a1_inject": "1",
+    "a1_impl_env": null,
+    "a1_counter_retrieved": true,
+    "a1_reg_info": {
+      "impl_requested": null,
+      "impl_applied": false,
+      "counter_requested": true,
+      "counter_passed": true
+    },
+    "vllm": "0.20.2",
+    "vllm_ascend": "source",
+    "vllm_ascend_file": "/vllm-workspace/vllm-ascend/vllm_ascend/__init__.py",
+    "init_s": 28.76,
+    "correctness_s": 1.65,
+    "outputs": [
+      {
+        "prompt_idx": 0,
+        "prompt": "The capital of France is",
+        "token_ids": [
+          260,
+          2240,
+          282,
+          7042,
+          30,
+          657,
+          314,
+          260
+        ],
+        "text": " the city of Paris. It is the"
+      },
+      {
+        "prompt_idx": 1,
+        "prompt": "def fibonacci(n):\n    if n < 2:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nprint(fibonacci(10)) #",
+        "token_ids": [
+          216,
+          33,
+          32,
+          198,
+          3272,
+          24,
+          38572,
+          46477
+        ],
+        "text": " 10\nprint(fibonacci"
+      },
+      {
+        "prompt_idx": 2,
+        "prompt": "Once upon a time, in a land far away, there lived a",
+        "token_ids": [
+          9357,
+          1573,
+          23142,
+          3365,
+          492,
+          764,
+          519,
+          30
+        ],
+        "text": " wise old owl named Ollie."
+      },
+      {
+        "prompt_idx": 3,
+        "prompt": "Water boils at 100 degrees",
+        "token_ids": [
+          20590,
+          28,
+          284,
+          260,
+          913,
+          36411,
+          418,
+          216
+        ],
+        "text": " Celsius, and the water boils at "
+      },
+      {
+        "prompt_idx": 4,
+        "prompt": "2 + 2 = 4, 3 + 3 =",
+        "token_ids": [
+          216,
+          38,
+          28,
+          216,
+          34,
+          1232,
+          216,
+          34
+        ],
+        "text": " 6, 2 + 2"
+      },
+      {
+        "prompt_idx": 5,
+        "prompt": "The quick brown fox jumps over the lazy dog. The quick brown fox",
+        "token_ids": [
+          27003,
+          690,
+          260,
+          23790,
+          2767,
+          30,
+          198,
+          198
+        ],
+        "text": " jumps over the lazy dog.\n\n"
+      }
+    ],
+    "prompt_logprobs": {
+      "0": {
+        "1": -8.226740837097168,
+        "2": -0.8253197073936462,
+        "3": -5.2279510498046875,
+        "4": -1.131880283355713
+      },
+      "1": {
+        "1": -9.863152503967285,
+        "2": -0.9983591437339783,
+        "3": -0.6416823267936707,
+        "4": -0.7285494208335876,
+        "5": -0.6597294211387634,
+        "6": -0.49693763256073,
+        "7": -0.9737597703933716,
+        "8": -0.11420406401157379,
+        "9": -1.7832145690917969,
+        "10": -0.012616579420864582,
+        "11": -0.9987544417381287,
+        "12": -0.026164118200540543,
+        "13": -0.06372889131307602,
+        "14": -0.050354283303022385,
+        "15": -0.17431633174419403,
+        "16": -0.35316556692123413,
+        "17": -1.0128569602966309,
+        "18": -0.05393194034695625,
+        "19": -0.011099145747721195,
+        "20": -0.0018170052208006382,
+        "21": -0.007709155790507793,
+        "22": -1.2262530326843262,
+        "23": -0.3156965970993042,
+        "24": -0.05183926597237587,
+        "25": -0.002577199600636959,
+        "26": -0.008104770444333553,
+        "27": -2.884823152271565e-05,
+        "28": -0.0002127659390680492,
+        "29": -0.0005893162451684475,
+        "30": -0.004305854439735413,
+        "31": -9.703165414975956e-05,
+        "32": -0.0012411518255248666,
+        "33": -0.5493088960647583,
+        "34": -0.3120810389518738,
+        "35": -1.0989595651626587,
+        "36": -0.38206353783607483,
+        "37": -0.061180178076028824,
+        "38": -0.012639769352972507,
+        "39": -0.009107593446969986,
+        "40": -1.0846093893051147,
+        "41": -0.33432236313819885,
+        "42": -0.173439621925354,
+        "43": -3.1765618324279785
+      },
+      "2": {
+        "1": -7.365015983581543,
+        "2": -0.0041435821913182735,
+        "3": -0.14280541241168976,
+        "4": -0.24937333166599274,
+        "5": -1.7425497770309448,
+        "6": -0.6909805536270142,
+        "7": -0.8414973616600037,
+        "8": -0.11190120130777359,
+        "9": -0.33676645159721375,
+        "10": -0.2817420959472656,
+        "11": -0.23048235476016998,
+        "12": -0.6500306725502014,
+        "13": -0.5611892342567444
+      },
+      "3": {
+        "1": -12.118914604187012,
+        "2": -2.2794644832611084,
+        "3": -1.0885552167892456,
+        "4": -1.6134028434753418,
+        "5": -0.407947301864624,
+        "6": -0.0985785573720932,
+        "7": -1.0547149181365967
+      },
+      "4": {
+        "1": -6.674912929534912,
+        "2": -0.8934631943702698,
+        "3": -1.5924986600875854,
+        "4": -3.279254913330078,
+        "5": -0.1673019379377365,
+        "6": -2.012434720993042,
+        "7": -2.982046365737915,
+        "8": -2.1848108768463135,
+        "9": -1.7571362257003784,
+        "10": -1.0597968101501465,
+        "11": -0.02451532892882824,
+        "12": -1.895517349243164,
+        "13": -0.12016607820987701
+      },
+      "5": {
+        "1": -8.664240837097168,
+        "2": -6.362853527069092,
+        "3": -0.011729440651834011,
+        "4": -1.551236629486084,
+        "5": -0.07587137818336487,
+        "6": -0.053710419684648514,
+        "7": -0.2667359709739685,
+        "8": -0.15758460760116577,
+        "9": -1.8890221118927002,
+        "10": -3.3577332496643066,
+        "11": -1.3464614152908325,
+        "12": -0.08649461716413498,
+        "13": -0.10805565863847733
+      }
+    },
+    "perf": {
+      "warmup": 1,
+      "repeats": 5,
+      "samples_s": [
+        0.2115,
+        0.2143,
+        0.2131,
+        0.223,
+        0.2149
+      ],
+      "stats_s": {
+        "mean": 0.2154,
+        "median": 0.2143,
+        "p95": 0.223,
+        "min": 0.2115,
+        "max": 0.223,
+        "stdev": 0.004
+      }
+    },
+    "phases": {
+      "setup": {
+        "start": 1793410380.187918,
+        "end": 1793410380.187978
+      },
+      "init": {
+        "start": 1793410384.78956,
+        "end": 1793410413.55356
+      },
+      "correctness": {
+        "start": 1793410413.553573,
+        "end": 1793410415.199438
+      },
+      "warmup": {
+        "start": 1793410415.199487,
+        "end": 1793410415.411316
+      },
+      "measured": {
+        "start": 1793410415.411323,
+        "end": 1793410416.488115
+      }
+    },
+    "main_counter_snapshots": {
+      "after_init": 0,
+      "after_correctness": 0,
+      "after_warmup": 0,
+      "after_measured": 0
+    },
+    "main_counter_scope": "仅本进程（child runner）A1 计数快照；引擎子进程计数须读 FLAGOS_C2_COUNT_DIR 下的 *_hits_<pid>.json 并按 hit_times 归阶段",
+    "rc": 0,
+    "wall_s": 60.37
+  },
+  "hit_files": [
+    {
+      "pid": 2680213,
+      "ppid": 2663709,
+      "op": "embedding",
+      "aten": "aten::embedding",
+      "run_id": "20261031T013206Z-2663709",
+      "hits": 0,
+      "hit_times": [],
+      "registered_at": 1793410380.185448,
+      "dump_s": 0.0,
+      "dumped_at": "2026-10-31T01:33:36Z",
+      "path": "ops/embedding/reports/c2_ascend910/embedding_hits_2680213.json",
+      "role": "main",
+      "ppid_match_main": false,
+      "phase_counts": {}
+    },
+    {
+      "pid": 2685667,
+      "ppid": 2680213,
+      "op": "embedding",
+      "aten": "aten::embedding",
+      "run_id": "20261031T013206Z-2663709",
+      "hits": 0,
+      "hit_times": [],
+      "registered_at": 1793410395.485792,
+      "dump_s": 0.0,
+      "dumped_at": "2026-10-31T01:33:46Z",
+      "path": "ops/embedding/reports/c2_ascend910/embedding_hits_2685667.json",
+      "role": "engine/worker",
+      "ppid_match_main": true,
+      "phase_counts": {}
+    },
+    {
+      "pid": 2685670,
+      "ppid": 2680213,
+      "op": "embedding",
+      "aten": "aten::embedding",
+      "run_id": "20261031T013206Z-2663709",
+      "hits": 97,
+      "hit_times": [
+        1793410404.062928,
+        1793410413.665904,
+        1793410413.936081,
+        1793410413.968982,
+        1793410413.996239,
+        1793410414.023346,
+        1793410414.050581,
+        1793410414.077497,
+        1793410414.104491,
+        1793410414.133296,
+        1793410414.163396,
+        1793410414.189804,
+        1793410414.216589,
+        1793410414.24281,
+        1793410414.268918,
+        1793410414.295058,
+        1793410414.321232,
+        1793410414.349151,
+        1793410414.378717,
+        1793410414.404934,
+        1793410414.431052,
+        1793410414.457083,
+        1793410414.483645,
+        1793410414.509669,
+        1793410414.535851,
+        1793410414.563651,
+        1793410414.593225,
+        1793410414.61939,
+        1793410414.645305,
+        1793410414.67121,
+        1793410414.697117,
+        1793410414.723107,
+        1793410414.74964,
+        1793410414.777091,
+        1793410414.805398,
+        1793410414.831475,
+        1793410414.857384,
+        1793410414.883342,
+        1793410414.909315,
+        1793410414.935342,
+        1793410414.961267,
+        1793410414.988703,
+        1793410415.017563,
+        1793410415.043576,
+        1793410415.069503,
+        1793410415.095474,
+        1793410415.121556,
+        1793410415.147757,
+        1793410415.173812,
+        1793410415.201986,
+        1793410415.229771,
+        1793410415.255664,
+        1793410415.282133,
+        1793410415.308068,
+        1793410415.334012,
+        1793410415.359963,
+        1793410415.385906,
+        1793410415.413709,
+        1793410415.441436,
+        1793410415.467381,
+        1793410415.493329,
+        1793410415.519155,
+        1793410415.545542,
+        1793410415.571513,
+        1793410415.597424,
+        1793410415.625034,
+        1793410415.652833,
+        1793410415.68032,
+        1793410415.706335,
+        1793410415.732373,
+        1793410415.75835,
+        1793410415.784291,
+        1793410415.811566,
+        1793410415.839348,
+        1793410415.867262,
+        1793410415.893344,
+        1793410415.919403,
+        1793410415.945368,
+        1793410415.972624,
+        1793410415.998782,
+        1793410416.024764,
+        1793410416.05242,
+        1793410416.080767,
+        1793410416.110811,
+        1793410416.137326,
+        1793410416.163599,
+        1793410416.189821,
+        1793410416.216043,
+        1793410416.24223,
+        1793410416.275683,
+        1793410416.303953,
+        1793410416.331014,
+        1793410416.357504,
+        1793410416.383853,
+        1793410416.410113,
+        1793410416.436312,
+        1793410416.462551
+      ],
+      "registered_at": 1793410395.826098,
+      "dump_s": 0.00569,
+      "dumped_at": "2026-10-31T01:33:37Z",
+      "path": "ops/embedding/reports/c2_ascend910/embedding_hits_2685670.json",
+      "role": "engine/worker",
+      "ppid_match_main": true,
+      "phase_counts": {
+        "init": 1,
+        "correctness": 48,
+        "warmup": 8,
+        "measured": 40
+      }
+    }
+  ],
+  "hit_files_stale_excluded": [],
+  "hit_attribution": {
+    "by_role": {
+      "main": {
+        "hits": 0
+      },
+      "engine/worker": {
+        "hits": 97,
+        "init": 1,
+        "correctness": 48,
+        "warmup": 8,
+        "measured": 40
+      },
+      "unknown": {}
+    },
+    "outside_windows": 0
+  },
+  "hit_attribution_check": {
+    "hits_total": 97,
+    "phase_attributed_total": 97,
+    "consistent": true,
+    "note": "phase_attributed 含 outside_windows 桶（如实计入）"
+  },
+  "engine_core_hits": 97,
+  "main_process_hits": 0,
+  "forward_hits": 97,
+  "total_hits_all_incl_probe": 97,
+  "outputs_equal": true,
+  "correctness": {
+    "applicable": true,
+    "criterion_predeclared": {
+      "C1_identity": "baseline vs inject 逐 prompt 生成前缀完全一致（6/6 prompt，位级）",
+      "C2_custom_min": "前 2 token 一致率 ≥ 0.667（≥4/6 prompt）",
+      "policy": "未过 C1 但过 C2 → INCONCLUSIVE（补首分歧/中间张量/logits 排查）；两皆未过 → FAIL；不得事后放宽阈值（docs/testing.md#assertions）"
+    },
+    "per_prompt": [
+      {
+        "prompt_idx": 0,
+        "prompt": "The capital of France is",
+        "baseline_token_ids": [
+          260,
+          2240,
+          282,
+          7042,
+          30,
+          657,
+          314,
+          260
+        ],
+        "inject_token_ids": [
+          260,
+          2240,
+          282,
+          7042,
+          30,
+          657,
+          314,
+          260
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      },
+      {
+        "prompt_idx": 1,
+        "prompt": "def fibonacci(n):\n    if n < 2:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\nprint(fibonacci(10)) #",
+        "baseline_token_ids": [
+          216,
+          33,
+          32,
+          198,
+          3272,
+          24,
+          38572,
+          46477
+        ],
+        "inject_token_ids": [
+          216,
+          33,
+          32,
+          198,
+          3272,
+          24,
+          38572,
+          46477
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      },
+      {
+        "prompt_idx": 2,
+        "prompt": "Once upon a time, in a land far away, there lived a",
+        "baseline_token_ids": [
+          9357,
+          1573,
+          23142,
+          3365,
+          492,
+          764,
+          519,
+          30
+        ],
+        "inject_token_ids": [
+          9357,
+          1573,
+          23142,
+          3365,
+          492,
+          764,
+          519,
+          30
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      },
+      {
+        "prompt_idx": 3,
+        "prompt": "Water boils at 100 degrees",
+        "baseline_token_ids": [
+          20590,
+          28,
+          284,
+          260,
+          913,
+          36411,
+          418,
+          216
+        ],
+        "inject_token_ids": [
+          20590,
+          28,
+          284,
+          260,
+          913,
+          36411,
+          418,
+          216
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      },
+      {
+        "prompt_idx": 4,
+        "prompt": "2 + 2 = 4, 3 + 3 =",
+        "baseline_token_ids": [
+          216,
+          38,
+          28,
+          216,
+          34,
+          1232,
+          216,
+          34
+        ],
+        "inject_token_ids": [
+          216,
+          38,
+          28,
+          216,
+          34,
+          1232,
+          216,
+          34
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      },
+      {
+        "prompt_idx": 5,
+        "prompt": "The quick brown fox jumps over the lazy dog. The quick brown fox",
+        "baseline_token_ids": [
+          27003,
+          690,
+          260,
+          23790,
+          2767,
+          30,
+          198,
+          198
+        ],
+        "inject_token_ids": [
+          27003,
+          690,
+          260,
+          23790,
+          2767,
+          30,
+          198,
+          198
+        ],
+        "common_prefix_len": 8,
+        "first_divergence_token_index": null,
+        "bitwise_equal": true,
+        "first2_equal": true
+      }
+    ],
+    "identity_pass": true,
+    "identity_pass_count": "6/6",
+    "first2_match_rate": 1.0,
+    "first2_match": "6/6",
+    "custom_min_pass": true,
+    "correctness_verdict": "PASS",
+    "prompt_logprob_same_path": {
+      "prompts_compared": 6,
+      "tokens": 93,
+      "max_abs_diff": 0.0,
+      "mean_abs_diff": 0.0,
+      "per_prompt": {
+        "0": {
+          "tokens": 4,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        },
+        "1": {
+          "tokens": 43,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        },
+        "2": {
+          "tokens": 13,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        },
+        "3": {
+          "tokens": 7,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        },
+        "4": {
+          "tokens": 13,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        },
+        "5": {
+          "tokens": 13,
+          "max_abs_diff": 0.0,
+          "mean_abs_diff": 0.0
+        }
+      }
+    }
+  },
+  "perf": {
+    "thresholds_predeclared": {
+      "ok": 1.2,
+      "warn": 1.3,
+      "note": "同调用链 inject/baseline 中位数比；对齐 docs/performance-regression.md +20%/+30%"
+    },
+    "sync_note": "llm.generate 为同步阻塞调用；模型前向在 EngineCore 子进程执行，主进程无法对引擎进程调用 torch.npu.synchronize()，故计时为 generate 墙钟时延（含调度/排队，非纯 kernel 时延）；两组同步方式完全一致，且每组独立进程运行。注入组计数落盘开销见 hit_files[].dump_s（相对 generate 时延为微秒级）。",
+    "per_mode": {
+      "baseline": {
+        "warmup": 1,
+        "repeats": 5,
+        "samples_s": [
+          0.2068,
+          0.2068,
+          0.2271,
+          0.2324,
+          0.2319
+        ],
+        "stats_s": {
+          "mean": 0.221,
+          "median": 0.2271,
+          "p95": 0.2324,
+          "min": 0.2068,
+          "max": 0.2324,
+          "stdev": 0.0117
+        }
+      },
+      "inject": {
+        "warmup": 1,
+        "repeats": 5,
+        "samples_s": [
+          0.2115,
+          0.2143,
+          0.2131,
+          0.223,
+          0.2149
+        ],
+        "stats_s": {
+          "mean": 0.2154,
+          "median": 0.2143,
+          "p95": 0.223,
+          "min": 0.2115,
+          "max": 0.223,
+          "stdev": 0.004
+        }
+      }
+    },
+    "comparisons": [
+      {
+        "name": "inject_vs_baseline",
+        "gate": true,
+        "a": "inject",
+        "b": "baseline",
+        "available": true,
+        "a_median_s": 0.2143,
+        "b_median_s": 0.2271,
+        "ratio_median": 0.9436,
+        "verdict": "OK"
+      }
+    ],
+    "gate_verdict": "OK"
+  },
+  "acceptance": {
+    "hit": true,
+    "correctness_same_path": "PASS",
+    "perf_gate": "OK",
+    "rc_all_zero": true,
+    "status": "complete-pending-review"
+  },
+  "c2_status": "c2-hit",
+  "notes": [
+    "真实 vLLM-Ascend 前向命中 aten::embedding。rc/ok 仅表示运行成功，不等于正确性通过或 C2 验收通过。"
+  ],
+  "acceptance_decision": {
+    "mode": "accept",
+    "collection_status": "completed",
+    "acceptance_status": "complete-pending-review",
+    "failed_checks": [],
+    "warnings": [],
+    "exit_code": 0,
+    "required_runs": [
+      "baseline",
+      "inject"
+    ]
+  },
+  "run_mode": "accept"
+}

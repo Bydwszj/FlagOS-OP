@@ -3,6 +3,13 @@
 
 The catalog is the scalable inventory source for a growing operator/platform
 matrix. The generated README is checked in for direct GitHub browsing.
+
+Evidence validation scope（#38 意见 6 / 协调 issue #41）: this script only
+performs a **structural/path check** — level enum membership, required
+evidence.report presence, and that referenced report files exist in the
+tree. It does NOT verify report contents, rerun experiments, or replace CI
+/ reviewer verification of the claims inside those reports. Keep the
+checks complementary to #41 rather than duplicating its semantics.
 """
 from __future__ import annotations
 
@@ -12,6 +19,18 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
+
+# 与 evidence_check 同源：等级 / 逐 profile 记录 / 派生汇总只认一套口径
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.evidence_schema import (  # noqa: E402  （脚本/包两种运行方式）
+    C2_LEVELS,
+    LEVEL_RANK,
+    VALID_LEVELS,
+    family_records,
+    operator_top_level,
+    records_map,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +49,50 @@ def _require_mapping(value, name: str) -> dict:
     if not isinstance(value, dict) or not value:
         raise ValueError(f"{name} must be a non-empty mapping")
     return value
+
+
+def _validate_evidence(op_name: str, family: str, platform: dict,
+                       root: Path) -> None:
+    """校验 platforms.<family>.evidence（issue #41 + 复审意见 3）。
+
+    形态/等级/归属口径与 ``scripts.evidence_check.py`` 同源（读
+    ``scripts.evidence_schema.family_records``，不在本文件另写一套）：
+
+      - list: 逐 profile 记录——同一 family 下不同 profile 各自带
+        level/report/status，不共享未经区分的等级（「算子 + profile」
+        最小证据单位）；
+      - dict: 旧的单条 family 级记录，兼容读取；含 ``profiles`` 键的
+        嵌套形态已停用；
+      - C2 / C2-routing-boundary 必须提供 evidence.report 且路径存在。
+
+    仅结构性/路径检查（见模块 docstring）: 不解读报告内容、不重跑实验、
+    不替代 CI 与审阅复核。
+    """
+    where = f"operator {op_name}/{family}"
+    records, errors = family_records(platform, where=where)
+    if errors:
+        raise ValueError(errors[0])
+    profiles = platform.get("profiles") or []
+    for record in records:
+        level = record.get("level")
+        report = record.get("report")
+        profile = record.get("profile")
+        if profile is not None and profile not in profiles:
+            raise ValueError(
+                f"{where}.evidence.profile {profile!r} outside "
+                f"platform profiles {profiles}")
+        if level in C2_LEVELS and not report:
+            raise ValueError(
+                f"{where} evidence.level={level} requires "
+                "evidence.report (真实引擎证据必须可追溯)")
+        if report is not None:
+            if not isinstance(report, str) or not report:
+                raise ValueError(
+                    f"{where}.evidence.report must be a non-empty string")
+            if not (root / report).is_file():
+                raise ValueError(
+                    f"{where}.evidence.report does not "
+                    f"exist: {report}")
 
 
 def validate_catalog(catalog: dict, root: Path = ROOT) -> None:
@@ -118,6 +181,7 @@ def validate_catalog(catalog: dict, root: Path = ROOT) -> None:
                     f"foundation operator {name} lacks a top-level route "
                     "or a route for every platform"
                 )
+        derived_records: list[dict] = []
         for family, platform in platforms.items():
             if family not in families:
                 raise ValueError(f"operator {name} has unknown family {family!r}")
@@ -136,6 +200,17 @@ def validate_catalog(catalog: dict, root: Path = ROOT) -> None:
                     f"{unknown_profiles}"
                 )
             family_counts[family] += 1
+            _validate_evidence(name, family, platform, root)
+            fam_records, _ = family_records(platform, where="catalog")
+            derived_records.extend(fam_records)
+        declared_top = op.get("evidence")
+        if derived_records and declared_top is not None:
+            derived_top = operator_top_level(derived_records)
+            if derived_top != declared_top:
+                raise ValueError(
+                    f"operator {name} evidence={declared_top!r} 与 profile "
+                    f"记录最高级 {derived_top} 不一致（operator 顶层汇总"
+                    f"只能由记录派生，不能独立填写）")
         if len(platforms) > 1:
             operator_dir = root / "ops" / directory
             if not (operator_dir / "PLATFORM.md").is_file():
@@ -177,28 +252,37 @@ def _operator_link(op: dict) -> str:
     return f"[{op['name']}]({op['directory']}/)"
 
 
-def _profile_level(op: dict, family: str, profile: str) -> str | None:
-    """算子在指定 family/profile 上的证据等级（无记录时 None）。"""
+def _profile_record(op: dict, family: str, profile: str) -> dict | None:
+    """算子在指定 family/profile 上的逐 profile 证据记录（无则 None）。"""
     platform = (op.get("platforms") or {}).get(family)
     if not isinstance(platform, dict):
         return None
-    evidence = platform.get("evidence")
-    if not isinstance(evidence, dict):
-        return None
-    profiles = evidence.get("profiles")
-    if not isinstance(profiles, dict):
-        return None
-    record = profiles.get(profile)
-    if isinstance(record, dict) and record.get("level") in ("C0", "C1", "C2"):
-        return record["level"]
-    return None
+    records, _ = family_records(platform, where="catalog")
+    record = records_map(records).get(profile)
+    return record if isinstance(record, dict) else None
+
+
+def _profile_level(op: dict, family: str, profile: str) -> str | None:
+    """算子在指定 family/profile 上的证据等级（无记录时 None）。"""
+    record = _profile_record(op, family, profile)
+    level = record.get("level") if record is not None else None
+    return level if level in VALID_LEVELS else None
 
 
 def _profile_labels(op: dict, family: str, profiles: list) -> list[str]:
+    """`<profile> <level>[·<status>]`；status 是维护者审阅状态轴。"""
     labels = []
     for profile in profiles:
-        level = _profile_level(op, family, profile)
-        labels.append(f"{profile} {level}" if level else str(profile))
+        record = _profile_record(op, family, profile)
+        level = record.get("level") if record is not None else None
+        if level not in VALID_LEVELS:
+            labels.append(str(profile))
+            continue
+        text = f"{profile} {level}"
+        status = record.get("status")
+        if isinstance(status, str) and status.strip():
+            text = f"{text}·{status}"
+        labels.append(text)
     return labels
 
 
@@ -223,7 +307,7 @@ def _evidence_cell(op: dict) -> str:
     segs = [
         f"{level}（{' · '.join(by_level[level])}）"
         for level in sorted(
-            by_level, key=lambda lv: -("C0", "C1", "C2").index(lv))
+            by_level, key=lambda lv: -LEVEL_RANK[lv])
     ]
     return " / ".join(segs)
 
@@ -419,9 +503,10 @@ def render_index(catalog: dict) -> str:
         "- **多平台算子**必须维护 `PLATFORM.md`；涉及平台合并流程时维护 `MERGE.md`。",
         "- **平台结论限定范围**：dtype、shape、dispatch key、运行时版本和",
         "  fallback 边界写在同一份证据链里。",
-        "- **证据等级按 profile 记录**：`platforms.<family>.evidence.profiles`",
-        "  是证据的最小单位（level/basis/report），顶层 `evidence` 只是这些",
-        "  记录的派生汇总；单个 family 下多个 profile 不共享未区分的等级。",
+        "- **证据等级按 profile 记录**：`platforms.<family>.evidence` 是",
+        "  逐 profile 记录列表（`- profile: <profile>` + level/basis/report",
+        "  /status），顶层 `evidence` 只是这些记录的派生汇总；单个 family",
+        "  下多个 profile 不共享未区分的等级。",
         "- **包态导入**统一使用 `from ops.<operator> import register_a1`；脚本态",
         "  仅作为单算子目录内运行的兼容模式。",
         "- CI 的 `ops-packaging` 是 CPU 包入口扫描；`ops/test_packaging.py` 是",

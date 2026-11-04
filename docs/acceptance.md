@@ -92,6 +92,21 @@ Must 清单（全勾才可进 [ops/](../ops/README.md)）:
 - [ ] 三层测试（kernel/op/framework）全绿
 - [ ] 性能门禁 0 FAIL（微算子另加分发开销检查）
 - [ ] 交付报告四件套齐备（REPORT + development + test-report + 分册）
+- [ ] **证据等级如实登记**: `ops/catalog.yaml` 的
+      `platforms.<family>.evidence.level` 与报告一致；C1（mini consumer）
+      不得写成完整 vLLM 支持；C2 / C2-routing-boundary 必须带
+      `evidence.report` 且文件存在（issue #41，`build_ops_index.py --check` 强制）
+
+C2 合并门禁（针对声称真实引擎交付的平台）:
+
+- 有真实 vLLM / 目标引擎双跑记录（版本、模型、profile、commit、
+  调用计数、输出对比）
+- 无真实引擎 runtime 时，只能标 C0/C1；若已在真实引擎环境内尝试
+  runtime 但默认路由未走到目标算子，才可标 C2-routing-boundary——
+  该级别必须附真实引擎尝试记录（引擎版本、注入方式、命中计数、
+  未命中原因），不得以「本环境无 runtime」为由直接标注；
+  并在 REPORT 写明环境边界
+- mini consumer 结论只能支撑 C1
 
 <a id="revalidate"></a>
 ## 环境变更后的重验 runbook（维护层）

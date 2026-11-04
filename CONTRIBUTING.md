@@ -67,6 +67,7 @@ python3 scripts/build_ops_index.py --check
 ```bash
 python3 -m pytest tests/unit -q                                            # 基础设施单测（无 GPU）
 python3 scripts/check_env.py --device <profile>                            # 匹配所用软件栈的环境锁
+python3 scripts/build_ops_index.py --check                                 # catalog 证据等级 / 路径（issue #41）
 ```
 
 昆仑芯 4.2 基线使用 `p800-kunlunxin`，5.0 复测栈使用

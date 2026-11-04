@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- **逐 profile 证据记录公共模块（issue #41 整改，PR #46）**：新增
+  `scripts/evidence_schema.py`，把「等级 / 实验判定 verdict / 维护者审阅
+  状态 review」三轴语义与路径解析、`redecide` 派生更正核验集中在一处，
+  `evidence_check.py` 与 `build_ops_index.py` 共用同一套口径；
+  `platforms.<family>.evidence` 统一为**逐 profile 记录列表**（旧单条
+  dict 兼容读取，含 `profiles` 键的嵌套形态停用），记录 `status` 与报告
+  acceptance 字段冲突、记录审阅状态未知词、`redecide` 源 SHA256/来源/
+  commit 不符均单独报错；`FAIL`、缺判定、`collect-only` 一律不能支撑
+  锁 C2 声明，`complete-pending-review` 记为「verdict 通过 + 待审阅」
 - **C1/C2 证据门禁（issue #41）**：新增 `scripts/evidence_check.py`
   （CI `ops-catalog` job）——校验 `ops/catalog.yaml` 每算子
   `evidence: C0|C1|C2` 声明、C1/C2 必须有 `test/framework_level.py`、
@@ -33,7 +42,21 @@
 - **P800 4.2 栈三项遗留记入已知问题（#24-#26）**：FlagGems 4.2 `gather`
   采样阶段 err_code 1（`USE_FLAGGEMS=0` 规避）、Qwen3-8B EngineCore
   初始化挂起、`copy_ ↔ type_as/to` A1 注入递归（`copy_` 排除）
+- **catalog 证据等级字段（issue #41）**：`ops/catalog.yaml` 的
+  `platforms.<family>.evidence` 支持 `level`（C0/C1/C2/C2-routing-boundary）
+  与可选 `report`；`scripts/build_ops_index.py` 校验非法 level、C2 缺
+  report 与不存在的 report 路径；生成页平台单元格显示证据等级；
+  [acceptance.md](docs/acceptance.md) 增加 C2 合并门禁清单
+- **sdpa_math 真实 vLLM-Ascend C2 双跑（issue #38）**：
+  `ops/sdpa_math/script/c2_real_vllm_ascend.py` 在 ascend910 上完成
+  baseline/注入双跑（vLLM 0.20.2 + vllm-ascend + SmolLM2-135M），
+  token_ids 逐位一致；A1 probe 命中、真实前向 `forward_hits=0`
+  （`npu_fusion_attention` 路由，known-issues #19）→ 标记
+  `C2-routing-boundary`，证据
+  [reports/c2_ascend910.md](ops/sdpa_math/reports/c2_ascend910.md)；
+   `injection/a1_aten_ops` 增加 `FLAGOS_C2_COUNT_DIR` pid 分片计数
 - **13 个基础 ATen 算子接入 p800-kunlunxin（2026-10-22）**：
+
   `clone/contiguous/copy_/detach/detach_/dropout/empty/empty_like/
   empty_strided/item/_local_scalar_dense/result_type/type_as` 完成
   kernel/op/应用等价三层验证、黄金与性能基线；注册 key 为
@@ -83,8 +106,9 @@
   （`tests/unit/test_evidence_check.py` 51 项）
 - **证据等级按 profile 记录 + 锁交叉校验收紧（issue #41 审阅落实）**：
   `ops/catalog.yaml` 以「算子 + profile」为证据记录最小单位
-  （`platforms.<family>.evidence.profiles.<profile>` 记 level/basis/
-  report/consumer/status，顶层 `evidence` 改为派生汇总并由门禁校验），
+  （`platforms.<family>.evidence` 逐 profile 记录列表，每条记
+  profile/level/basis/report/consumer/status，顶层 `evidence` 改为派生
+  汇总并由门禁校验），
   `ops/README.md` 按 profile 展示等级（平台列/证据列均带 profile 明细）；
   `scripts/evidence_check.py` 新增：锁 `scope` 等级改与**本锁 profile**
   记录比较（P800 报告不能再给 PPU 的 C2 声明背书，另一环境 C1 也不再
@@ -124,6 +148,9 @@
   `reference` 遮蔽约束；backend 导入回归测试同步覆盖 P800 与 MLU
 
 ### Fixed
+- **embedding PLATFORM 降级对齐（issue #38）**：`ops/embedding/PLATFORM.md`
+  头部与 §2 由「三平台交付」改为「两平台交付 + ascend910 历史实验」，
+  与 `ops/catalog.yaml` / `ops/README.md` / `REPORT.md` 口径一致
 - 环境与基座索引复核修正：embedding 的 MLU 证据归入匹配的
   `mlu590` 环境锁；PPU 镜像引用补全 Harbor registry / namespace；
   环境锁与镜像 catalog 增加双向关系校验；历史镜像保留稳定文档锚点；

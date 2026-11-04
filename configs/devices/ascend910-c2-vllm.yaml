@@ -1,0 +1,43 @@
+# 设备 Profile: Ascend 910 — 真实 vLLM-Ascend C2 栈
+# 与 ascend910 同硬件；软件栈含 editable vllm + vllm-ascend 源码树
+# （见 configs/env/ascend910-c2-vllm.lock.yaml）。双 profile 先例:
+# thead-ppu / thead-ppu-c2、p800-kunlunxin{,-gems5}。
+# 用途: embedding / sdpa_math 的 C2（真实 vLLM EngineCore）证据复跑。
+# wt-2026-10-30-fix  wt <31944766+TruNcat3@users.noreply.github.com>
+name: ascend910-c2-vllm
+vendor: ascend
+
+auto_detect:
+  module: torch_npu               # 本栈同样可 import，探测不区分有无真实框架
+  enabled: false                  # 同硬件可挂 dev / C2 多软件栈——仅显式选择
+
+device:
+  torch_device: "npu:0"           # kernel/op 层测试设备（C2 用卡 0）
+  visible_devices: "0"
+  dispatch_key: AutogradPrivateUse1
+
+framework:
+  # C2 harness 用 SmolLM2-135M 快照（FLAGOS_MODEL_PATH 可覆盖）；
+  # 真实引擎要求 enforce_eager=True + VLLM_WORKER_MULTIPROC_METHOD=spawn
+  # （见 harness _child_env；框架参数仅作 profile 记录，e2e 脚本自行传参）。
+  tensor_parallel_size: 1
+  distributed_executor_backend: mp
+  max_model_len: 192
+  max_num_seqs: 1
+  gpu_memory_utilization: 0.2
+  enforce_eager: true
+  enable_prefix_caching: false
+  load_format: auto
+  seed: 20260823
+  model_path: /root/.cache/huggingface/hub/models--HuggingFaceTB--SmolLM2-135M/snapshots/93efa2f097d58c2a74874c7e644dbc9b0cee75a2
+  quirks:
+    keep_default_prefer: false
+    require_two_visible_devices: false
+    no_vllm_runtime: false        # 与历史 dev 基座相反: 真实框架入口可用
+
+vendor_delegate: null
+
+reference_fallback: reference.torch
+
+# 厂商硬件 kernel 直测清单（本 profile 仅承接 C2 framework 证据，不新增）
+vendor_kernels: []

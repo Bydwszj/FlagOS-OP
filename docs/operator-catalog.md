@@ -101,15 +101,27 @@ platforms:
   <family-key>:
     profiles: [<已交付 profile>]
     implementation: <实现摘要>
-    evidence:
-      profiles:
-        <profile>:
-          level: C0 | C1 | C2   # 算子 + profile 是证据记录的最小单位
-          basis: <C1/C2 必填：consumer 证据范围>
-          report: <C2 必填：仓库内结构化证据报告>
-          consumer: <可选：consumer/engine 标识，与结构化报告核对>
-          status: <可选：验证状态，与结构化报告核对>
+    evidence:            # 逐 profile 记录列表（issue #41 + 复审意见 3）
+      - profile: <该 family 已交付 profile>
+        level: C0 | C1 | C2 | C2-routing-boundary  # 算子 + profile 是证据记录的最小单位
+        basis: <C1/C2 必填：consumer 证据范围>
+        report: <C2* 必填：仓库内证据报告，且必须列入 evidence_paths>
+        consumer: <可选：consumer/engine 标识，与结构化报告核对>
+        status: <可选：维护者审阅状态（complete-pending-review = 已采集待审阅）>
+        redecide: <可选：派生更正文件，须能校验源文件 SHA256 与更正关联>
 ```
+
+证据等级语义（与 [docs/testing.md](testing.md) 一致）：
+
+| level | 含义 | 校验 |
+|---|---|---|
+| `C0` | 契约 / 黄金 / 直调 | 可不带 report |
+| `C1` | mini consumer / 等价消费方 | 可不带 report；报告里不得写成完整 vLLM |
+| `C2` | 真实引擎命中目标算子 | **必须** `evidence.report` 且文件存在 |
+| `C2-routing-boundary` | 真实引擎可跑、输出可比，但默认路由未命中该算子 | **必须** `evidence.report` 且文件存在 |
+
+`scripts/build_ops_index.py --check` 会拒绝非法 level、缺失的 C2 report
+和不存在的 report 路径（禁止占位证据）。
 
 foundation 算子还需要顶层 `route`，除非每个平台条目单独声明 `route`。
 算子里的 platform 条目表示已交付声明，必须由该算子的测试和报告支撑。
@@ -128,11 +140,40 @@ foundation 算子还需要顶层 `route`，除非每个平台条目单独声明 
   C2 只按已实测消费点的 profile 标注；「注册进引擎但未被调用」
   停在 C1。
 
-`evidence`（operator 顶层）是各 `platforms.<family>.evidence.profiles`
+`evidence`（operator 顶层）是各 `platforms.<family>.evidence[]` 逐 profile
 记录的**派生汇总**（最高等级），门禁校验二者一致；单个 family 下多个
 profile（如 `thead-ppu` 与 `thead-ppu-c2`、`p800-kunlunxin` 与
-`p800-kunlunxin-gems5`）必须各自有独立记录，不共享未区分的等级。
-`ops/README.md` 按 profile 展示等级（平台列与证据列均带 profile 明细）。
+`p800-kunlunxin-gems5`、`ascend910` 与 `ascend910-c2-vllm`）必须各自有
+独立记录，不共享未区分的等级。`ops/README.md` 按 profile 展示等级
+（平台列与证据列均带 profile 明细）。
+
+**三个正交维度**（PR #46 复审意见 3），`scripts/evidence_schema.py` 是
+catalog、环境锁交叉检查、目录生成共用的解析/归一化入口，三处不得各写
+一套「是否通过」：
+
+| 维度 | 来源 | 含义 |
+|---|---|---|
+| evidence level | 记录 `level` | 证据等级 C0/C1/C2/C2-routing-boundary |
+| 实验判定 verdict | 结构化报告 `status`/`ok`/`c2_status`/`acceptance.*` | 该次实验通过 / 失败 / 缺判定 |
+| 维护者审阅状态 review | 记录 `status`（或报告 acceptance 字段） | `complete-pending-review` = 证据已采集、待审阅 |
+
+`complete-pending-review` **不等于全量 PASS**（目录页与生成表都会带出该
+标注），也不抹掉其中已通过的实验结果；`FAIL`、缺判定、仅采集完成
+（`collect-only`）的材料一律不能支撑锁的 C2 声明。旧的单条 family 级
+`evidence` dict 仍可兼容读取，但无法唯一绑定 profile 时直接报错；
+嵌套的 `evidence.profiles` 已停用，统一为逐 profile 记录列表。
+
+审阅状态轴单独核对：记录 `status` 与报告 acceptance 字段给出的审阅
+状态冲突时报错，记录自称已审阅通过而报告仍是 `complete-pending-review`
+也报错（待审阅不能写成全量 PASS），记录 `status` 用未知词同样报错——
+审阅状态只认记录里的词表，不臆断。
+
+**派生更正**（#44 兼容）：原始 summary 可能保留旧 `profile`（如
+`ascend910`），其 `acceptance_redecide.json` 记录更正、源文件 SHA256、
+采集/重判 commit。门禁读取更正时必须核验 `raw_material.summary_path`、
+`summary_sha256`、`profile_field_original`、`corrections`（was→now）与
+40 位 `redecide.commit` 全部对上，才采用更正后的范围；**不覆写原始
+JSON**，也不因看到派生文件就跳过原始来源校验。
 
 `python3 scripts/evidence_check.py`（CI `ops-catalog` job）复核上述字段、
 平台状态三方一致（catalog ↔ operator-catalog.md ↔ 生成的 `ops/README.md`）
@@ -153,11 +194,15 @@ profile（如 `thead-ppu` 与 `thead-ppu-c2`、`p800-kunlunxin` 与
   报告（禁外链、禁占位）；结构化 JSON 证据必须**可解析且声明与锁
   `name` 一致的 `profile`**——损坏、缺 profile、跨 profile 的 JSON
   单独报错、不再无声跳过，也不能成为任何支撑（P800 报告不能给 PPU
-  的 C2 声明背书）；`scope` 行里的 `ops/<算子>` 必须登记在 catalog，
+  的 C2 声明背书）；唯一例外是**通过核验的派生更正**：记录声明
+  `redecide` 且源路径/SHA256/`profile_field_original`/corrections/
+  commit 全部对上时，采用更正后的 profile 范围（见上文「派生更正」）；
+  `scope` 行里的 `ops/<算子>` 必须登记在 catalog，
   `ops/<算子> C[012]` 声明必须等于**该锁 profile** 记录的等级（而不是
   operator 全局汇总），并由本锁 `evidence` 中该算子的**合格**报告支撑
-  ——C2 声明的支撑报告必须有效且通过（JSON 可解析、声明本锁 profile、
-  `status`/`ok` 为通过态，与 catalog 侧报告通过状态检查同口径），并
+  ——C2 声明的支撑报告必须**有效且通过**（JSON 可解析、声明本锁
+  profile、实验判定为通过态：`status`/`ok`/`c2_status`/`acceptance.*`
+  任一明确适配口径，与 catalog 侧同一套判定函数），并
   与该 profile 的 C2 记录 `report`/`consumer` 同源关联（等于记录
   `report`、列入算子 `evidence_paths`、或 consumer 与记录一致）。
 
@@ -205,7 +250,7 @@ OK 表述成 #41 验收范围全部闭环：
 2. 通过 kernel、op、framework/application 三层测试。
 3. 补齐 golden 与性能证据。
 4. 在 `ops/catalog.yaml` 的 `operators` 中登记算子、按 profile 回填
-   `platforms.<family>.evidence.profiles`（顶层 `evidence` 汇总随记录
+   `platforms.<family>.evidence[]`（顶层 `evidence` 汇总随记录
    派生；C2 需 `evidence_basis` + `evidence_paths` + 记录 `report`）。
 5. 运行 `python3 scripts/build_ops_index.py`。
 6. 确认 `python3 scripts/build_ops_index.py --check` 通过。
