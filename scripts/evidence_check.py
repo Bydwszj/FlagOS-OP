@@ -37,10 +37,16 @@ review——``complete-pending-review`` 不是全量 PASS）。
    缺口，不在本层臆断其范围）。
 6. 环境锁 `configs/env/*.lock.yaml`：`evidence[].path` 用同一路径
    解析函数核验（禁占位/外链/越界）；锁 `name` 必须是
-   `configs/devices` 已知 profile，且结构化证据必须可解析并声明
-   本锁 `profile`（损坏/缺 profile 的 JSON 单独报错，不能静默跳过，
-   也不能成为支撑）——唯一例外是记录声明且**核验通过的派生更正**
-   （源 SHA256 / profile_field_original / corrections / commit 全对）；
+   `configs/devices` 已知 profile。每个结构化 JSON 证据在**入口**就
+   走与 catalog `record.report` 同口径的校验：可解析、声明本锁
+   `profile`（损坏/缺 profile/跨 profile 的 JSON 单独报「路径 +
+   原因」，不能静默跳过，也不能成为支撑；唯一例外是记录声明且
+   **核验通过的派生更正**——源 SHA256 / profile_field_original /
+   corrections / commit 全对）、`status` 为 `PASS`/`OK` 或 `ok: true`
+   （`FAIL`/缺判定/仅采集完成一律不成立）、记录声明 consumer/engine
+   时与报告一致；md 等文本支撑在 `scope` **等级声明**核验时要求正文
+   含本锁 profile 完整 token。锁 evidence 不必逐条指向该 profile 的
+   `record.report`，但 C2 支撑必须同源；
    `scope` 行的 `ops/<算子> C[012]` 必须等于
    **该锁 profile** 的记录等级（而不是 operator 全局汇总），C2
    声明的支撑报告必须**有效且实验判定通过**（JSON 可解析、声明本锁
@@ -75,6 +81,7 @@ from scripts.evidence_schema import (  # noqa: E402  （脚本/包两种运行�
     TOP_LEVELS,
     VERDICT_MISSING,
     VERDICT_PASS,
+    consumer_problem,
     effective_profile,
     family_records,
     is_valid_level,
@@ -85,6 +92,7 @@ from scripts.evidence_schema import (  # noqa: E402  （脚本/包两种运行�
     record_for,
     record_review_state,
     records_map,
+    report_consumer,
     report_review_state,
     report_verdict,
     resolve_repo_file,
@@ -219,15 +227,9 @@ def _report_declares_profile(
                 f"{where}: 记录自称已审阅通过，报告仍是 complete-pending-"
                 f"review（待审阅不能写成全量 PASS）")
         want_consumer = record.get("consumer")
-        if isinstance(want_consumer, str) and want_consumer:
-            declared_consumer = (
-                data.get("consumer_type") or data.get("consumer")
-                or data.get("engine"))
-            if declared_consumer is not None and \
-                    str(declared_consumer) != want_consumer:
-                errors.append(
-                    f"{where}: 报告 consumer={declared_consumer!r} 与记录 "
-                    f"consumer={want_consumer!r} 不一致")
+        problem = consumer_problem(data, want_consumer)
+        if problem is not None:
+            errors.append(f"{where}: {problem}")
         _ = effective  # 更正后的范围已用于一致性核验
     else:
         try:
@@ -546,6 +548,60 @@ def _check_report_e2e_profiles(root: Path, errors: list[str]) -> None:
                         f"（行内须标明该证据的 profile）")
 
 
+def _lock_json_evidence_problems(
+        root: Path, resolved: Path, norm: str, lock_name, record,
+) -> list[str]:
+    """锁 `evidence[].path` 里结构化 JSON 的校验问题（空 = 合格）。
+
+    与 catalog `record.report` **同口径**：判定函数全部来自
+    `scripts/evidence_schema.py`，不另起一套——
+
+    - 可解析：`load_json_object()`（损坏 / 顶层非映射单独报错）；
+    - 范围：`effective_profile()` —— `profile` 与锁 `name` 一致，或
+      记录声明且**核验通过**的派生更正（redecide）；
+    - 实验判定：`verdict_problem()` —— `FAIL`、缺 `status`/`ok`、仅
+      采集完成（`collect-only`）一律不成立；
+    - consumer：记录声明 `consumer` 时，`consumer_problem()` 校验报告
+      的 `consumer_type`/`consumer`/`engine` 一致。
+
+    任一不合格都返回「路径 + 原因」级别的问题串，调用方据此报错并把该
+    文件排除出支撑集合（不得成为任何 scope 等级声明的支撑）。
+    """
+    data, err = load_json_object(resolved)
+    if err is not None:
+        return [f"{err}（损坏文件不能作为支撑）"]
+    problems: list[str] = []
+    redecide_rel = record.get("redecide") if isinstance(record, dict) \
+        else None
+    declared = data.get("profile")
+    if isinstance(declared, str) and declared and (
+            not isinstance(lock_name, str) or declared == lock_name):
+        pass
+    elif redecide_rel:
+        _, rerr = effective_profile(
+            root, resolved, norm, data, want_profile=lock_name,
+            redecide_rel=redecide_rel)
+        if rerr is not None:
+            problems.append(f"派生更正核验失败：{rerr}（不能跨环境背书）")
+    elif not isinstance(declared, str) or not declared:
+        problems.append(
+            f"缺少 profile 字段（结构化证据必须声明本锁 profile"
+            f"{' ' + lock_name if isinstance(lock_name, str) else ''}"
+            f"，无效文件不能作为支撑）")
+    else:
+        problems.append(
+            f"声明 profile={declared} 与锁 profile={lock_name} 不一致"
+            f"（不能跨环境背书）")
+    problem = verdict_problem(data)
+    if problem is not None:
+        problems.append(f"{problem}（不能作为支撑）")
+    problem = consumer_problem(
+        data, record.get("consumer") if isinstance(record, dict) else None)
+    if problem is not None:
+        problems.append(f"{problem}（不能作为支撑）")
+    return problems
+
+
 def _lock_c2_support_ok(
         root: Path, norm: str, lock_name: str, record: dict,
         record_report_norm: str | None,
@@ -586,17 +642,12 @@ def _lock_c2_support_ok(
         problem = verdict_problem(data)
         if problem is not None:
             return False, problem
-        got_consumer = (
-            data.get("consumer_type") or data.get("consumer")
-            or data.get("engine"))
-        if isinstance(want_consumer, str) and want_consumer:
-            if got_consumer is not None and \
-                    str(got_consumer) != want_consumer:
-                return False, (
-                    f"报告 consumer={got_consumer!r} 与记录 "
-                    f"consumer={want_consumer!r} 不一致")
-            if str(got_consumer) == want_consumer:
-                associated = True
+        problem = consumer_problem(data, want_consumer)
+        if problem is not None:
+            return False, problem
+        if isinstance(want_consumer, str) and want_consumer and \
+                report_consumer(data) == want_consumer:
+            associated = True
         if not associated:
             return False, (
                 f"与 profile {lock_name} 的 C2 记录 report/consumer "
@@ -620,11 +671,19 @@ def _check_lock_crossref(root: Path, catalog: dict,
     """缺口 2：环境锁 evidence/scope 与 catalog 按 profile 记录的交叉引用。
 
     - `evidence[].path` 必须经统一解析（仓库内、当前存在的文件，
-      禁外链/占位/绝对路径/越界/目录）；结构化 JSON 证据必须可解析
-      并声明与锁 `name` 一致的 `profile`（P800 报告不能给 PPU
-      背书）——损坏、缺 profile、跨 profile 的 JSON **单独报错**，
-      不再无声跳过，且不能成为任何支撑；
-      指向 `ops/<dir>/...` 时按**规范化路径**做算子归属核对；
+      禁外链/占位/绝对路径/越界/目录）；结构化 JSON 证据在**入口**就
+      走与 catalog `record.report` 同口径的结构化校验
+      （`_lock_json_evidence_problems`：可解析、`profile` 一致含
+      redecide、`verdict_problem` 判定通过、记录声明 consumer/engine
+      时一致）——损坏、缺 profile、跨 profile、`FAIL`、缺 `status`、
+      `collect-only`、consumer 不一致的 JSON 一律**单独报「路径 +
+      原因」**，不再无声跳过，且**不得成为任何 scope 等级声明的
+      支撑**；指向 `ops/<dir>/...` 时按**规范化路径**做算子归属核对；
+    - 非 JSON 支撑（md 等）：`scope` **等级声明**核验时要求正文含本锁
+      `profile` 完整 token（通过状态无法结构化核验）。锁 evidence
+      **不必**逐条指向该 profile 的 `record.report`；但 **C2 支撑必须
+      同源**（记录 `report` / 列入 `evidence_paths` / 报告 consumer 与
+      记录 consumer 一致，任一即可）；
     - `scope` 行里的 `ops/<dir>` 必须是 catalog 登记的算子；
     - `scope` 行声明 `ops/<dir> C[012]` 时，锁 `name` 必须是
       `configs/devices` 已知 profile，且声明必须等于**该 profile**
@@ -643,6 +702,7 @@ def _check_lock_crossref(root: Path, catalog: dict,
         lock_name = lock.get("name")
         referenced: set[str] = set()
         supporting: dict[str, list[str]] = {}
+        rejected: dict[str, list[str]] = {}
 
         entries = lock.get("evidence", [])
         if not isinstance(entries, list):
@@ -671,53 +731,23 @@ def _check_lock_crossref(root: Path, catalog: dict,
                         f"{rel}: evidence {_path_error(kind, path)}")
                 continue
             support_ok = True
+            problems: list[str] = []
             m = _EVIDENCE_OP_PATH.match(norm)
             op_name = m.group("op") if m else None
             if norm.endswith(".json"):
-                # 结构化证据必须有效并落在本锁 profile 范围内：损坏/
-                # 缺 profile/跨 profile 均单独报错，且不能成为支撑；
-                # 范围不一致时只认核验过的 redecide 派生更正。
-                data, err = load_json_object(resolved)
-                if err is not None:
-                    errors.append(
-                        f"{rel}: evidence {norm} {err}"
-                        f"（损坏文件不能作为支撑）")
+                # 结构化证据在入口就做与 catalog record.report 同口径的
+                # 校验（可解析 / profile 一致含 redecide / 判定通过 /
+                # consumer 一致）；任一不过即报「路径 + 原因」，且不得
+                # 成为任何 scope 等级声明的支撑。
+                record = record_for(catalog, op_name, lock_name) \
+                    if op_name is not None and \
+                    isinstance(lock_name, str) else None
+                problems = _lock_json_evidence_problems(
+                    root, resolved, norm, lock_name, record)
+                if problems:
                     support_ok = False
-                    data = None
-                if data is not None:
-                    record = record_for(catalog, op_name, lock_name) \
-                        if op_name is not None and \
-                        isinstance(lock_name, str) else None
-                    redecide_rel = record.get("redecide") \
-                        if isinstance(record, dict) else None
-                    declared = data.get("profile")
-                    if isinstance(declared, str) and declared and (
-                            not isinstance(lock_name, str) or
-                            declared == lock_name):
-                        pass
-                    elif redecide_rel:
-                        _, rerr = effective_profile(
-                            root, resolved, norm, data,
-                            want_profile=lock_name,
-                            redecide_rel=redecide_rel)
-                        if rerr is not None:
-                            errors.append(
-                                f"{rel}: evidence {norm} 派生更正核验失败："
-                                f"{rerr}（不能跨环境背书）")
-                            support_ok = False
-                    elif not isinstance(declared, str) or not declared:
-                        errors.append(
-                            f"{rel}: evidence {norm} 缺少 profile 字段"
-                            f"（结构化证据必须声明本锁 profile"
-                            f"{' ' + lock_name if isinstance(lock_name, str) else ''}"
-                            f"，无效文件不能作为支撑）")
-                        support_ok = False
-                    else:
-                        errors.append(
-                            f"{rel}: evidence {norm} 声明 "
-                            f"profile={declared} 与锁 profile="
-                            f"{lock_name} 不一致（不能跨环境背书）")
-                        support_ok = False
+                    for problem in problems:
+                        errors.append(f"{rel}: evidence {norm} {problem}")
             if m is None:
                 continue
             op_name = m.group("op")
@@ -725,6 +755,9 @@ def _check_lock_crossref(root: Path, catalog: dict,
                 referenced.add(op_name)
                 if support_ok:
                     supporting.setdefault(op_name, []).append(norm)
+                elif problems:
+                    rejected.setdefault(op_name, []).append(
+                        f"{norm}: {'；'.join(problems)}")
             else:
                 errors.append(
                     f"{rel}: evidence 引用 catalog 没有登记的算子 "
@@ -771,9 +804,18 @@ def _check_lock_crossref(root: Path, catalog: dict,
                     f"（比较对象是本锁 profile 的记录，不是 operator "
                     f"全局汇总）")
             if op_name not in supporting:
-                errors.append(
+                msg = (
                     f"{rel}: scope 的 ops/{op_name} {claimed} 声明在本锁 "
                     f"evidence 中没有对应报告支撑")
+                reasons = rejected.get(op_name)
+                if reasons:
+                    # 入口校验已拦下这些文件（路径 + 原因），它们不得成为支撑
+                    msg += f"（支撑报告不合格：{'；'.join(reasons)}）"
+                elif claimed == "C2":
+                    msg += (
+                        f"（需声明 profile {lock_name} 且与该 profile "
+                        f"的 C2 记录 report/consumer 同源）")
+                errors.append(msg)
             elif claimed == "C2":
                 record_report_norm = None
                 want_report = record.get("report")
@@ -811,6 +853,31 @@ def _check_lock_crossref(root: Path, catalog: dict,
                             f"evidence 中没有对应报告支撑"
                             f"（需声明 profile {lock_name} 且与该 profile "
                             f"的 C2 记录 report/consumer 同源）")
+            else:
+                # C0/C1 等级声明：结构化 JSON 已在入口做过同口径校验，
+                # md 等文本支撑必须含本锁 profile 完整 token（正文范围
+                # 核验；通过状态无法从文本结构化判定）。
+                qualified = False
+                md_failures: list[str] = []
+                for norm in supporting[op_name]:
+                    if norm.endswith(".json"):
+                        qualified = True
+                        break
+                    try:
+                        text = (root / norm).read_text(
+                            encoding="utf-8", errors="replace")
+                    except OSError as exc:
+                        md_failures.append(f"{norm}: 无法读取 {exc}")
+                        continue
+                    if _token_in(text, lock_name):
+                        qualified = True
+                        break
+                    md_failures.append(
+                        f"{norm}: 正文未出现 profile {lock_name} 标记")
+                if not qualified:
+                    errors.append(
+                        f"{rel}: scope 的 ops/{op_name} {claimed} 声明的"
+                        f"支撑材料不合格（" + "；".join(md_failures) + "）")
 
 
 def check(root: Path) -> list[str]:

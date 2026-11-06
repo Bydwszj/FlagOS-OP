@@ -1131,3 +1131,159 @@ def test_lock_c2_scope_backed_by_collect_only_json_is_rejected(
     errors = check(tmp_path)
     assert any("支撑报告不合格" in e and "缺少 status/ok" in e
                for e in errors)
+
+
+# ── PR #46 复审 P1：lock evidence[].path 入口结构化校验（与 catalog
+#    record.report 同口径：可解析 / profile 一致含 redecide / verdict
+#    通过 / consumer 一致；不通过即报「路径 + 原因」且不得成为支撑）──
+
+
+def test_lock_evidence_fail_json_without_scope_is_rejected(
+        tmp_path: Path):
+    """阴性（帖称“空错误列表”的场景）：无 scope 时 FAIL JSON 也报错。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{"path": rel, "note": "FAIL 报告"}]),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "状态非通过" in e
+               and "不能作为支撑" in e for e in errors)
+
+
+def test_lock_evidence_statusless_json_without_scope_is_rejected(
+        tmp_path: Path):
+    """阴性（帖称“空错误列表”的场景）：缺 status/ok 的 JSON 也报错。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/nostatus.json",
+                        {"profile": "demo-1"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{"path": rel, "note": "无判定报告"}]),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "缺少 status/ok" in e
+               and "不能作为支撑" in e for e in errors)
+
+
+def test_lock_evidence_collect_only_json_without_scope_is_rejected(
+        tmp_path: Path):
+    """阴性：仅采集完成（collect-only）没有实验结论，入口即拦。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/collect.json",
+                        {"profile": "demo-1", "status": "collect-only"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{"path": rel, "note": "只采了数据"}]),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "缺少 status/ok" in e
+               and "不能作为支撑" in e for e in errors)
+
+
+def test_lock_evidence_corrupt_json_without_scope_is_rejected(
+        tmp_path: Path):
+    """阴性（帖称“空错误列表”的场景）：损坏 JSON 入口单独报路径 + 原因。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/broken.json",
+                        "{ not valid json")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(evidence=[{"path": rel, "note": "损坏报告"}]),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "JSON 解析失败" in e
+               and "不能作为支撑" in e for e in errors)
+
+
+def test_lock_evidence_consumer_mismatch_is_rejected(tmp_path: Path):
+    """阴性：记录声明 consumer，报告 engine/consumer 不一致（入口即拦）。"""
+    rel = _write_report(
+        tmp_path, "ops/demo_op/reports/cross_consumer.json",
+        {"profile": "demo-1", "status": "PASS", "engine": "other-engine"})
+    _c2_repo(
+        tmp_path, rel, {"consumer": "vllm-enginecore"},
+        lock=_demo_lock(evidence=[{"path": rel, "note": "consumer 冲突"}]),
+    )
+    errors = check(tmp_path)
+    assert any(
+        f"evidence {rel}" in e
+        and "报告 consumer='other-engine' 与记录 "
+            "consumer='vllm-enginecore' 不一致" in e
+        and "不能作为支撑" in e for e in errors)
+
+
+def test_lock_evidence_json_with_matching_consumer_passes(tmp_path: Path):
+    """阳性：合法报告（同 profile + PASS + consumer 与记录一致）通过。"""
+    rel = _write_report(
+        tmp_path, "ops/demo_op/reports/ok_consumer.json",
+        {"profile": "demo-1", "status": "PASS",
+         "consumer_type": "vllm-enginecore"})
+    _c2_repo(
+        tmp_path, rel, {"consumer": "vllm-enginecore"},
+        lock=_demo_lock(evidence=[{"path": rel, "note": "合法报告"}]),
+    )
+    assert check(tmp_path) == []
+
+
+def test_lock_c1_scope_backed_by_fail_json_is_rejected(tmp_path: Path):
+    """阴性：FAIL 的同 profile JSON 不得成为 C1 声明的支撑。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": rel, "note": "FAIL 报告"}],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "状态非通过" in e for e in errors)
+    assert any("没有对应报告支撑" in e and "支撑报告不合格" in e
+               for e in errors)
+
+
+def test_lock_c1_scope_backed_by_statusless_json_is_rejected(
+        tmp_path: Path):
+    """阴性：缺 status/ok 的 JSON 不得成为 C1 声明的支撑。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/nostatus.json",
+                        {"profile": "demo-1"})
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": rel, "note": "无判定报告"}],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "缺少 status/ok" in e
+               for e in errors)
+    assert any("没有对应报告支撑" in e and "支撑报告不合格" in e
+               for e in errors)
+
+
+def test_lock_c1_scope_backed_by_md_without_profile_token_is_rejected(
+        tmp_path: Path):
+    """阴性：md 支撑按 scope 等级声明要求正文含本锁 profile 完整 token。"""
+    (tmp_path / "ops" / "demo_op" / "reports").mkdir(
+        parents=True, exist_ok=True)
+    (tmp_path / "ops" / "demo_op" / "reports" / "notes.md").write_text(
+        "# notes\n\n只写环境描述，没有 profile 标记。\n", encoding="utf-8")
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": "ops/demo_op/reports/notes.md",
+                       "note": "无 profile token 的叙述"}],
+        ),
+    )
+    errors = check(tmp_path)
+    assert any("支撑材料不合格" in e
+               and "正文未出现 profile demo-1 标记" in e for e in errors)

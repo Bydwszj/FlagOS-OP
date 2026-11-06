@@ -335,6 +335,36 @@ def report_verdict(data) -> str:
     return VERDICT_MISSING
 
 
+def report_consumer(data) -> str | None:
+    """结构化报告声明的 consumer/engine（无则 None）。
+
+    只取明确字段 ``consumer_type`` / ``consumer`` / ``engine``，不做自然
+    语言匹配；catalog 记录与环境锁两侧共用，避免各写一套「consumer 是谁」。
+    """
+    if not isinstance(data, dict):
+        return None
+    for key in ("consumer_type", "consumer", "engine"):
+        value = data.get(key)
+        if value is not None and str(value).strip():
+            return str(value)
+    return None
+
+
+def consumer_problem(data, want_consumer) -> str | None:
+    """记录声明 consumer 时，报告侧冲突给出原因；一致/未声明返回 None。
+
+    与 :func:`verdict_problem` 一样是 catalog `record.report` 与锁
+    `evidence[].path` 共用的判定口径：只做一致性核对，不猜语义。
+    """
+    if not (isinstance(want_consumer, str) and want_consumer.strip()):
+        return None
+    got = report_consumer(data)
+    if got is not None and got != want_consumer:
+        return (f"报告 consumer={got!r} 与记录 consumer="
+                f"{want_consumer!r} 不一致")
+    return None
+
+
 def verdict_problem(data) -> str | None:
     """实验判定不合格时给出原因；合格返回 None（catalog 与锁共用）。"""
     verdict = report_verdict(data)
