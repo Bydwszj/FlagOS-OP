@@ -1287,3 +1287,131 @@ def test_lock_c1_scope_backed_by_md_without_profile_token_is_rejected(
     errors = check(tmp_path)
     assert any("支撑材料不合格" in e
                and "正文未出现 profile demo-1 标记" in e for e in errors)
+
+
+# ── 历史失败材料 vs 有效验收证据：evidence[].role（#41 文档范围口径）──
+
+def test_lock_evidence_background_fail_json_kept_without_scope(
+        tmp_path: Path):
+    """阳性：标 role=background 的 FAIL JSON 作历史材料保留，不报通过性错误。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/hist_fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            evidence=[{"path": rel, "role": "background",
+                       "note": "2026-10-01 历史失败实验记录"}]),
+    )
+    assert check(tmp_path) == []
+
+
+def test_lock_evidence_background_fail_json_not_supporting_c1(
+        tmp_path: Path):
+    """阴性：背景 FAIL JSON 不进入支撑集合，C1 声明仍报缺有效支撑。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/hist_fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": rel, "role": "background",
+                       "note": "历史失败实验"}]),
+    )
+    errors = check(tmp_path)
+    # 背景材料不按验收口径判通过性
+    assert not any(f"evidence {rel}" in e and "状态非通过" in e
+                   for e in errors)
+    # 但也不能混进「通过证据」集合
+    assert any("没有对应报告支撑" in e and "role=background" in e
+               and rel in e for e in errors)
+
+
+def test_lock_evidence_background_md_not_supporting_c1(tmp_path: Path):
+    """阴性：正文含 profile token 的 md 标为背景后也不能支撑 C1 声明。"""
+    rel = _write_report(
+        tmp_path, "ops/demo_op/reports/notes.md",
+        "# notes\n\n历史记录：profile demo-1 的旧结论。\n")
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": rel, "role": "background",
+                       "note": "历史叙述材料"}]),
+    )
+    errors = check(tmp_path)
+    assert any("没有对应报告支撑" in e and "role=background" in e
+               and rel in e for e in errors)
+
+
+def test_lock_c2_scope_backed_only_by_background_json_is_rejected(
+        tmp_path: Path):
+    """阴性：同 profile 的 PASS JSON 标为背景后也不能背书 C2 声明。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/pass.json",
+                        {"profile": "demo-1", "status": "PASS"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            scope=["ops/demo_op C2（真实 vLLM 双跑）"],
+            evidence=[{"path": rel, "role": "background",
+                       "note": "背景保留，不作验收支撑"}]),
+    )
+    errors = check(tmp_path)
+    assert any("没有对应报告支撑" in e and "role=background" in e
+               and rel in e for e in errors)
+    assert not any(f"evidence {rel}" in e for e in errors)
+
+
+def test_lock_evidence_background_alongside_acceptance_support_passes(
+        tmp_path: Path):
+    """阳性：背景材料 + 合格验收材料并存时，等级声明由验收材料支撑。"""
+    bad = _write_report(tmp_path, "ops/demo_op/reports/hist_fail.json",
+                        {"profile": "demo-1", "status": "FAIL"})
+    good = _write_report(tmp_path, "ops/demo_op/reports/pass.json",
+                         {"profile": "demo-1", "status": "PASS"})
+    _make_repo(
+        tmp_path,
+        evidence="C1",
+        basis=None,
+        paths=None,
+        lock=_demo_lock(
+            scope=["ops/demo_op C1（mini consumer 双跑）"],
+            evidence=[{"path": bad, "role": "background",
+                       "note": "历史失败记录"},
+                      {"path": good, "note": "有效验收报告"}]),
+    )
+    assert check(tmp_path) == []
+
+
+def test_lock_evidence_unknown_role_is_rejected(tmp_path: Path):
+    """阴性：未知 role 词直接报错，不臆断用途。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/pass.json",
+                        {"profile": "demo-1", "status": "PASS"})
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            evidence=[{"path": rel, "role": "historical"}]),
+    )
+    errors = check(tmp_path)
+    assert any("role='historical' 不是已知用途" in e
+               and "acceptance / background" in e for e in errors)
+
+
+def test_lock_evidence_background_corrupt_json_is_rejected(
+        tmp_path: Path):
+    """阴性：背景 JSON 也必须可解析（禁占位/禁坏文件不变）。"""
+    rel = _write_report(tmp_path, "ops/demo_op/reports/broken.json",
+                        "{ not valid json")
+    _make_repo(
+        tmp_path,
+        lock=_demo_lock(
+            evidence=[{"path": rel, "role": "background"}]),
+    )
+    errors = check(tmp_path)
+    assert any(f"evidence {rel}" in e and "JSON 解析失败" in e
+               and "背景材料也必须是可解析的 JSON" in e for e in errors)

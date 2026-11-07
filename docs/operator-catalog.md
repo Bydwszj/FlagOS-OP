@@ -225,24 +225,77 @@ ops/<operator>/MERGE.md
 
 ## 已知未覆盖范围（issue #41 跟踪，勿把门禁 OK 写成全部完成）
 
-证据门禁当前**有意不覆盖**以下内容，处理方式在此登记，避免把脚本返回
-OK 表述成 #41 验收范围全部闭环：
+脚本返回 OK 只代表门禁规则覆盖到的范围通过；#41 原始清单的文档项按下表
+逐项登记——**已修复的列文件与提交，暂不覆盖的明确保留**（继续在 #41 或
+拆分跟踪），避免把脚本 OK 表述成 #41 验收范围全部闭环。
 
-1. `ops/sdpa_math/reports/development.md` 的 `| FlagOS E2E | ☑ PASS | … |`
-   分册行未标 profile——门禁只扫聚合页 `ops/*/REPORT.md`；补齐需要先补
-   该行的真实环境数据，属 ops 报告数据改动，单独跟踪。
-2. `ops/sdpa_math/REPORT.md` 关键数字表里的 E2E 性能倍率行（无成功标记、
-   无 profile）——口径是「宣称通过的 E2E 结果行必须标 profile」，纯数字
-   行不在其列；若收紧到「所有 E2E 行必标 profile」需同步补这两行数据。
-3. 日期门禁只检查格式合法与不晚于当天，**不判定** stale roadmap/历史结论
-   失效；历史证据可以保留，但不能冒充当前环境结论——该内容检查需要逐页
-   人工复核，作为 #41 后续项而不是脚本规则。
-4. REPORT E2E 行出现 profile token 只是第一层；行内引用的结构化 JSON
-   证据声明的 `profile` 已与行内范围核对，但**未声明 profile 的引用
-   文件**（存量：`ops/sdpa_math/reports/e2e_flagos_p800-kunlunxin.json`
-   无 `profile` 字段）不在本层臆断其范围，补字段属报告数据改动、
-   单独跟踪；行结论与 catalog 按 profile 记录的证据范围是否一致，仍由
-   catalog 记录 + 环境锁交叉校验兜底，脚本不解析任意自然语言叙述。
+### 已修复（文件与提交）
+
+| #41 清单项 | 处理 | 主要文件 | 提交 |
+|---|---|---|---|
+| operator catalog 增 C1/C2 evidence 字段 | `platforms.<family>.evidence` 逐 profile 记录（level/basis/report/status/consumer/redecide），顶层汇总由记录派生 | `ops/catalog.yaml`、`scripts/evidence_schema.py` | 618a196、572aaf6、b95849a、3587291（#44 合入） |
+| docs/operator-catalog.md、ops/catalog.yaml、ops/README.md 平台状态一致 | `evidence_check` 复核 catalog ↔ 本页状态表 ↔ 生成 `ops/README.md` 状态行；`build_ops_index.py --check` 兜底生成页 | `scripts/evidence_check.py`、`scripts/build_ops_index.py`、`ops/README.md` | 572aaf6、b95849a |
+| 环境锁 evidence 指向现存报告、禁占位证据 | 统一路径解析拒绝外链/绝对路径/越界/目录/不存在；结构化 JSON 在入口做与 `record.report` 同口径校验 | `scripts/evidence_check.py`、`scripts/evidence_schema.py` | fc5134f、b95849a、375d970 |
+| 聚合报告 E2E 结果标明 profile（P800 不能代表 PPU） | `ops/*/REPORT.md` 宣称通过的 FlagOS E2E 行要含已知 profile 完整 token；行内引用的 JSON 声明 profile 必须与行内范围一致 | `scripts/evidence_check.py` | fc5134f、e7a4914 |
+| 真实 vLLM C2 作为合并前检查、mini consumer 只能标 C1 | CI `ops-catalog` 跑 `evidence_check`；`scope` 的 `ops/<op> C[012]` 必须等于该 profile 记录并有合格支撑，C2 支撑须有效且通过、与记录 `report`/`consumer` 同源 | `.github/workflows/ci.yml`、`scripts/evidence_check.py` | 572aaf6、b95849a、e7a4914、375d970 |
+| stale roadmap/过期结论（脚本可判的部分） | 日期格式与不晚于当天、证据路径存在性、生成页一致由门禁覆盖；**结论是否过期**由本页下方人工复核记录，不进脚本 | `scripts/evidence_check.py` | 572aaf6、b95849a |
+| `git diff --check` 空白与长行规范 | CI `docs-and-syntax` 跑 `git diff --check`（PR 用 merge-base 全量）；本分支提交与工作树均无空白错误 | `.github/workflows/ci.yml` | 572aaf6 |
+
+### 明确保留（未覆盖，继续在 #41 或拆分跟踪）
+
+1. `ops/sdpa_math/reports/development.md:111` 的
+   `| FlagOS E2E | ☑ PASS | … |` 分册成功行未标 profile——门禁只扫聚合页
+   `ops/*/REPORT.md`；补齐需要先补该行的真实环境数据，属 ops 报告数据
+   改动。**本单不改实验材料，该行保留在 #41（可拆分为数据回填子任务）。**
+2. `ops/sdpa_math/REPORT.md:79` 关键数字表里的 E2E 性能倍率行（无成功
+   标记、无 profile）——口径是「宣称通过的 E2E 结果行必须标 profile」，
+   纯数字行不在其列；若收紧到「所有 E2E 行必标 profile」需同步补这两行
+   数据。**保留在 #41，未覆盖。**
+3. REPORT E2E 行引用的**未声明 profile 的 JSON**（存量
+   `ops/sdpa_math/reports/e2e_flagos_p800-kunlunxin.json` 无 `profile`
+   字段）不在本层臆断其范围，补字段属报告数据改动。**保留在 #41，
+   未覆盖**；行结论与 catalog 记录的范围一致性仍由 catalog 记录 + 环境锁
+   交叉校验兜底，脚本不解析任意自然语言叙述。
+4. stale roadmap/过期结论的**自动判定**——日期合法不等于结论仍适用，
+   历史日期本身也不是错误；本单只做下方人工复核记录，**不加脚本规则，
+   作为 #41 后续项保留**。
+
+### 历史失败材料与有效验收证据的区分（锁 `evidence[].role`）
+
+失败实验和历史材料可以作为背景保留，但必须**明确用途**、不能混入「通过
+证据」集合（不靠自然语言匹配猜状态，只用显式 metadata）：
+
+- `role: acceptance`（默认）：有效验收证据，按既有口径核验（可解析、
+  `profile` 一致含 redecide、`verdict_problem` 判定通过、记录声明
+  consumer/engine 时一致），合格后才可能成为 scope 等级声明的支撑；
+- `role: background`：历史失败/背景材料——路径仍须是仓库内现存文件、
+  JSON 仍须可解析（禁占位不变），但不核验通过性，且**永不**进入任何
+  C0/C1/C2 声明的支撑；等级声明只靠背景材料时仍报「没有对应报告
+  支撑」并点名背景条目；
+- 未知 `role` 词直接报错（用途由维护者写明，不臆断）；
+- 存量锁条目均未标注，一律按 `acceptance` 处理，行为与既有口径一致；
+  本单未替存量条目改标（存量只登记，见「明确保留」）。
+
+### stale roadmap / 过期结论人工复核记录（2026-11-07）
+
+- 复核范围（门禁相关页 + #41 点名的结论页）：`ops/catalog.yaml` 的 6 条
+  `roadmap_note` 与 `platform_families` 状态、本页状态表、生成的
+  `ops/README.md`、`docs/environments.md`、`docs/base-images.md`、
+  `ops/sdpa/REPORT.md`、`ops/sdpa_math/REPORT.md`、
+  `ops/embedding/REPORT.md`。
+- 结论：
+  1. 6 条 `roadmap_note` 与各自 `status`/`current_profiles` 一致：
+     planned 家族（enflame/biren）无 profile、无算子条目，没有把规划写成
+     已交付；partial 家族的说明与已交付算子/证据一致。
+  2. 过期结论已有显式处置，无需改判：`ops/embedding/REPORT.md` 的 P800
+     A1 dispatch 行标「作废，待复测」（遗留 4）；`ops/sdpa/REPORT.md`
+     顶部声明历史 Ascend 数字不替代 P800/MLU 当前结论；
+     `docs/environments.md` 的 2026-09-16/18/23 段落显式标为历史环境与
+     原始交付快照。
+  3. 在上述范围内未发现把历史日期写成当前结论的页面；历史证据原样保留，
+     本单未改任何实验材料。
+- 该复核需要逐页语义判断，按 #41 口径**只作人工记录、不进脚本规则**，
+  继续作为 #41 后续项（见「明确保留 4」）。
 
 ## 新增算子
 

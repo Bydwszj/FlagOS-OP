@@ -19,6 +19,11 @@ evidence level          记录 ``level``             C0/C1/C2/C2-routing-boundar
 但**不等于全量 PASS**，也不抹掉其中已通过的实验结果。``FAIL``、缺判定、
 仅采集完成（``collect-only``）一律不能支撑锁的 C2 声明。
 
+锁 ``evidence[]`` 条目另有**用途标注** ``role``（:func:`evidence_role`）：
+``acceptance``（默认）= 有效验收证据，走上面的判定口径；``background``
+= 历史失败/背景材料，明确用途后可以保留，但**永不**混入「通过证据」
+集合（不满足任何 scope 等级声明）。未知 ``role`` 词直接报错。
+
 结构来源唯一：``platforms.<family>.evidence`` 逐 profile 记录列表。
 旧的单条 family 级 dict 兼容读取；无法唯一绑定 profile 时明确报错；
 嵌套 ``evidence.profiles`` 已停用。
@@ -48,6 +53,15 @@ VERDICT_MISSING = "missing"
 REVIEW_PASS = "pass"
 REVIEW_PENDING = "pending"
 REVIEW_UNDECLARED = "undeclared"
+
+# ── 锁 evidence 的用途标注（历史失败/背景材料 vs 有效验收证据） ──
+# acceptance：有效验收证据，按 verdict/profile/consumer 口径核验后才可能
+#             成为 scope 等级声明的支撑（默认，存量条目均属此类）。
+# background：历史失败/背景材料，明确用途、可以保留，但**永不**进入任何
+#             C0/C1/C2 声明的「通过证据」集合。
+ROLE_ACCEPTANCE = "acceptance"
+ROLE_BACKGROUND = "background"
+KNOWN_ROLES: tuple[str, ...] = (ROLE_ACCEPTANCE, ROLE_BACKGROUND)
 
 _FAIL_WORDS: frozenset[str] = frozenset(
     {"fail", "failed", "failure", "error", "ng", "c2-miss", "miss"})
@@ -434,6 +448,25 @@ def review_word_known(record) -> bool:
     if not isinstance(record, dict) or _word(record.get("status")) is None:
         return True  # 未声明不算错
     return record_review_state(record) != REVIEW_UNDECLARED
+
+
+def evidence_role(entry) -> tuple[str | None, str | None]:
+    """锁 ``evidence[]`` 条目的用途标注（历史失败材料的明确用途声明）。
+
+    返回 ``(role, 错误)``：未标注按 ``acceptance`` 处理（与存量行为
+    一致）；标注 ``background`` 表示历史失败/背景材料，只作背景保留、
+    不参与任何等级声明的支撑；未知词返回错误而不是臆断——用途必须由
+    维护者写明，不靠自然语言匹配猜。
+    """
+    if not isinstance(entry, dict):
+        return None, "evidence 条目必须是映射"
+    role = entry.get("role")
+    if role is None:
+        return ROLE_ACCEPTANCE, None
+    if isinstance(role, str) and role.strip() in KNOWN_ROLES:
+        return role.strip(), None
+    return None, (f"evidence role={role!r} 不是已知用途"
+                  f"（{' / '.join(KNOWN_ROLES)}）")
 
 
 # ── 派生更正（#44：原始 summary 保留旧 profile，redecide 记录更正） ──

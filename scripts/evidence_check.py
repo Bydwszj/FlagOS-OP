@@ -53,6 +53,10 @@ review——``complete-pending-review`` 不是全量 PASS）。
    profile、verdict=pass；`FAIL`/缺判定/仅采集完成一律不成立），
    并与该 profile 的 C2 记录
    `report`/`consumer` 同源关联。
+   条目可标 `role`（`evidence_role()`）区分**历史失败/背景材料**与
+   有效验收证据：`role: background` 的条目路径仍须真实存在（JSON
+   仍须可解析），但不核验通过性、**永不**计入任何等级声明的支撑；
+   未标注按 `acceptance` 处理（与存量行为一致），未知 `role` 词报错。
 
 用法::
 
@@ -78,11 +82,14 @@ from scripts.evidence_schema import (  # noqa: E402  （脚本/包两种运行�
     REVIEW_PASS,
     REVIEW_PENDING,
     REVIEW_UNDECLARED,
+    ROLE_ACCEPTANCE,
+    ROLE_BACKGROUND,
     TOP_LEVELS,
     VERDICT_MISSING,
     VERDICT_PASS,
     consumer_problem,
     effective_profile,
+    evidence_role,
     family_records,
     is_valid_level,
     load_json_object,
@@ -679,6 +686,12 @@ def _check_lock_crossref(root: Path, catalog: dict,
       `collect-only`、consumer 不一致的 JSON 一律**单独报「路径 +
       原因」**，不再无声跳过，且**不得成为任何 scope 等级声明的
       支撑**；指向 `ops/<dir>/...` 时按**规范化路径**做算子归属核对；
+    - `evidence[].role`（`evidence_role()`）区分**历史失败/背景材料**
+      与有效验收证据：`role: background` 的条目路径仍须真实存在、
+      JSON 仍须可解析（禁占位不变），但不核验 profile/verdict/
+      consumer，也**永不**进入 `supporting`——该算子的等级声明若只靠
+      背景材料，仍报「没有对应报告支撑」并点名背景条目；未标注按
+      `acceptance` 处理（存量行为不变），未知 `role` 词报错；
     - 非 JSON 支撑（md 等）：`scope` **等级声明**核验时要求正文含本锁
       `profile` 完整 token（通过状态无法结构化核验）。锁 evidence
       **不必**逐条指向该 profile 的 `record.report`；但 **C2 支撑必须
@@ -703,6 +716,7 @@ def _check_lock_crossref(root: Path, catalog: dict,
         referenced: set[str] = set()
         supporting: dict[str, list[str]] = {}
         rejected: dict[str, list[str]] = {}
+        background: dict[str, list[str]] = {}
 
         entries = lock.get("evidence", [])
         if not isinstance(entries, list):
@@ -712,6 +726,10 @@ def _check_lock_crossref(root: Path, catalog: dict,
         for entry in entries:
             if not isinstance(entry, dict):
                 errors.append(f"{rel}: evidence 条目必须是映射 {entry!r}")
+                continue
+            role, role_err = evidence_role(entry)
+            if role_err is not None:
+                errors.append(f"{rel}: {role_err}")
                 continue
             path = entry.get("path")
             if not isinstance(path, str) or not path.strip():
@@ -734,6 +752,25 @@ def _check_lock_crossref(root: Path, catalog: dict,
             problems: list[str] = []
             m = _EVIDENCE_OP_PATH.match(norm)
             op_name = m.group("op") if m else None
+            if role == ROLE_BACKGROUND:
+                # 历史失败/背景材料：明确用途后可以保留，但不核验通过性
+                # （FAIL/缺判定/跨 profile 都是它作为历史记录的常态），
+                # 也永不进入 supporting —— 不混入「通过证据」集合。
+                if norm.endswith(".json"):
+                    _, bg_err = load_json_object(resolved)
+                    if bg_err is not None:
+                        errors.append(
+                            f"{rel}: evidence {norm} {bg_err}"
+                            "（背景材料也必须是可解析的 JSON）")
+                if m is None:
+                    continue
+                if op_name in ops_by_dir:
+                    background.setdefault(op_name, []).append(norm)
+                else:
+                    errors.append(
+                        f"{rel}: evidence 引用 catalog 没有登记的算子 "
+                        f"ops/{op_name}")
+                continue
             if norm.endswith(".json"):
                 # 结构化证据在入口就做与 catalog record.report 同口径的
                 # 校验（可解析 / profile 一致含 redecide / 判定通过 /
@@ -753,7 +790,7 @@ def _check_lock_crossref(root: Path, catalog: dict,
             op_name = m.group("op")
             if op_name in ops_by_dir:
                 referenced.add(op_name)
-                if support_ok:
+                if support_ok and role == ROLE_ACCEPTANCE:
                     supporting.setdefault(op_name, []).append(norm)
                 elif problems:
                     rejected.setdefault(op_name, []).append(
@@ -815,6 +852,11 @@ def _check_lock_crossref(root: Path, catalog: dict,
                     msg += (
                         f"（需声明 profile {lock_name} 且与该 profile "
                         f"的 C2 记录 report/consumer 同源）")
+                notes = background.get(op_name)
+                if notes:
+                    # 历史失败/背景材料可以保留，但不构成有效验收证据
+                    msg += ("；历史/背景材料（role=background）不计入支撑："
+                            + "、".join(notes))
                 errors.append(msg)
             elif claimed == "C2":
                 record_report_norm = None
