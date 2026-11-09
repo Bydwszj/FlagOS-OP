@@ -21,6 +21,8 @@ jobs:
         run: python3 scripts/build_env_index.py --check
       - name: 基座镜像索引一致性检查
         run: python3 scripts/build_base_image_index.py --check
+      - name: C1/C2 证据门禁
+        run: python3 scripts/evidence_check.py
 
   ops-packaging:
     runs-on: ubuntu-latest
@@ -72,6 +74,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 空白字符检查
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --check "origin/${{ github.base_ref }}...HEAD"
+          else
+            git show --check --format= HEAD
+          fi
 
       - name: Markdown 链接与锚点检查
         run: |

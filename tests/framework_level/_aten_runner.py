@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import time
 from pathlib import Path
 
 
@@ -32,13 +34,24 @@ def main() -> None:
     llm = LLM(model=args.model, enforce_eager=True, max_model_len=128,
               tensor_parallel_size=1, gpu_memory_utilization=0.2,
               trust_remote_code=True, disable_log_stats=True)
+    t0 = time.perf_counter()
     outs = llm.generate(
         ["the future of AI is", "hello world"],
         SamplingParams(max_tokens=16, temperature=0.0, detokenize=False),
     )
+    latency = time.perf_counter() - t0
     result = {
         "output_token_ids": [list(o.outputs[0].token_ids) for o in outs],
+        "latency_s": round(latency, 4),
     }
+    # sdpa_math 框架级梯度证据（仅注入运行；A1 已由 sitecustomize 注册）
+    if (os.environ.get("FLAGOS_A1_ATEN_INJECT") == "1"
+            and os.environ.get("A1_SDPA_GRADPROBE") == "1"):
+        try:
+            import a1_aten_ops
+            result["sdpa_grad"] = a1_aten_ops.grad_probe()
+        except Exception as e:
+            result["sdpa_grad"] = {"ok": False, "error": repr(e)}
     Path(args.out_json).write_text(json.dumps(result))
 
 

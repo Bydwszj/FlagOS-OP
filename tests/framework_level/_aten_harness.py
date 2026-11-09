@@ -34,6 +34,8 @@ COUNT_ENV = {
     "empty_strided": "A1_EMPTY_STRIDED_COUNT_FILE",
     "item": "A1_ITEM_COUNT_FILE",
     "_local_scalar_dense": "A1_LSD_COUNT_FILE",
+    "embedding": "A1_EMBEDDING_COUNT_FILE",
+    "sdpa_math": "A1_SDPA_MATH_COUNT_FILE",
 }
 
 
@@ -77,7 +79,7 @@ def ensure_model() -> str:
 
 
 def _run(model: str, out_json: str, *, inject: bool, count_dir: str,
-         dispatch_key: str) -> dict:
+         dispatch_key: str, extra_env: dict | None = None) -> dict:
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{INJECTION}{os.pathsep}{ROOT}"
     env["VLLM_LOGGING_LEVEL"] = "WARNING"
@@ -87,6 +89,8 @@ def _run(model: str, out_json: str, *, inject: bool, count_dir: str,
         env["A1_DISPATCH_KEY"] = dispatch_key
         for op, var in COUNT_ENV.items():
             env[var] = str(Path(count_dir) / op)
+        for k, v in (extra_env or {}).items():
+            env[k] = v
     cmd = [sys.executable, str(HERE / "_aten_runner.py"), str(out_json), model]
     subprocess.run(cmd, check=True, env=env, cwd=str(ROOT))
     return json.loads(Path(out_json).read_text())
@@ -96,6 +100,9 @@ def _agg_counts(count_dir: str) -> dict:
     agg: dict[str, int] = {}
     for p in glob.glob(str(Path(count_dir) / "*")):
         op = os.path.basename(p)
+        stem, dot, tail = op.rpartition(".")
+        if dot and tail.isdigit():      # 计数文件带 pid 后缀 → 还原算子名
+            op = stem
         try:
             agg[op] = agg.get(op, 0) + sum(json.load(open(p)).values())
         except (OSError, ValueError):
@@ -110,19 +117,63 @@ def run_real_vllm(profile) -> dict:
         out_inj = os.path.join(d, "inj.json")
         count_dir = os.path.join(d, "counts")
         os.makedirs(count_dir, exist_ok=True)
+        extra_env = {}
+        if profile.name.startswith("p800"):
+            # P800 上 sdpa_math 走 vendor O/LSE + exact-P 实现（与 op 层交付一致）
+            extra_env["A1_SDPA_MATH_IMPL"] = "p800"
+            ops = [o.strip() for o in
+                   os.environ.get("FLAGOS_A1_OPS", "").split(",") if o.strip()]
+            if "sdpa_math" in ops:
+                # 真实引擎等价消费者: prefill 注意力 → A1 private math；
+                # 证据 = 命中计数 + 概率图统计 JSONL + 梯度 probe。
+                extra_env["A1_SDPA_CONSUMER"] = "prefill"
+                extra_env["A1_SDPA_EVIDENCE_FILE"] = os.path.join(
+                    count_dir, "sdpa_evidence.jsonl")
+                extra_env["A1_SDPA_GRADPROBE"] = "1"
         base = _run(model, out_base, inject=False, count_dir=count_dir,
                     dispatch_key=profile.dispatch_key)
         inj = _run(model, out_inj, inject=True, count_dir=count_dir,
-                   dispatch_key=profile.dispatch_key)
+                    dispatch_key=profile.dispatch_key, extra_env=extra_env)
         counts = _agg_counts(count_dir)
+        sdpa = _agg_sdpa_evidence(count_dir, inj)
 
     match = base["output_token_ids"] == inj["output_token_ids"]
     total = sum(counts.values())
     return {
         "ok": bool(match and total > 0),
         "engine": "vllm",
+        "profile": profile.name,
         "model": model,
         "output_match": match,
         "counts": counts,
         "total_calls": total,
+        "sdpa": sdpa,
+        "latency_s": {"base": base.get("latency_s"),
+                      "inj": inj.get("latency_s")},
     }
+
+
+def _agg_sdpa_evidence(count_dir: str, inj: dict) -> dict:
+    """汇 sdpa_math 消费/概率图证据 + 注入运行的梯度 probe 结果。"""
+    path = Path(count_dir) / "sdpa_evidence.jsonl"
+    sdpa: dict = {}
+    if path.is_file():
+        import json as _json
+        recs = []
+        for line in path.read_text().splitlines():
+            try:
+                recs.append(_json.loads(line))
+            except ValueError:
+                continue
+        consumed = [r for r in recs if r.get("type") == "consume"]
+        fallbacks = [r for r in recs if r.get("type") == "fallback"]
+        sdpa["consumer"] = "vllm_prefill_attention"
+        sdpa["calls"] = len(consumed)
+        sdpa["fallbacks"] = len(fallbacks)
+        sdpa["fallback_reasons"] = sorted(
+            {r.get("reason", "?") for r in fallbacks})
+        if consumed:
+            sdpa["prob_sample"] = consumed[0]
+    if isinstance(inj.get("sdpa_grad"), dict):
+        sdpa["grad"] = inj["sdpa_grad"]
+    return sdpa

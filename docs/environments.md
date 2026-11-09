@@ -195,6 +195,7 @@ python3 scripts/build_env_index.py --check
 
 - ops/sdpa / sdpa_math / embedding 在 FlagGems 5.0 栈的兼容性复测
 - vllm-plugin-FL 0.2.0 dispatch 行为（known-issues #20 / #23）
+- A1-aten 真实 vLLM C2（embedding/sdpa_math，2026-10-29，随机权重 /models/random-qwen3-tiny，issue #39；证据见 tests/framework_level/README.md 与 tests/framework_level/evidence/）
 - 框架级冒烟（冒烟模型缺失，framework 矩阵未复测，见复测页 §5.5）
 
 | 软件包 / 组件 | 锁定版本 |
@@ -212,7 +213,7 @@ python3 scripts/build_env_index.py --check
 
 - [docs/flaggems5-p800-retest.md](../docs/flaggems5-p800-retest.md)：FlagGems 5.0 P800 复测总入口（黄金、A1、mini-consumer、dispatch 与性能证据）
 
-备注：dev 容器 flagos-p800-gems5-vllm0202-dev（非共享镜像正式发布通道）； 尚未登记对应镜像 tag/digest 或构建配方，本锁用于核对已有容器的软件版本， 不作为完整安装清单。中央入口须显式选择 `p800-kunlunxin-gems5`， 独立算子使用各自的本地硬件别名，见 [昆仑芯环境配置](installation.md#kunlunxin)。 flag_gems / vllm-plugin-FL 为 pip 安装，与 4.2 共享镜像的本地路径安装 （/env/FlagGems、/env/xvllm-plugin-FL）不同。框架冒烟模型 /workspace/random-llm-models/llama-3.1-8b-like 在该容器缺失， `--require-model` 会失败，framework 矩阵未复测 （见 docs/flaggems5-p800-retest.md）。硬件快照取自主机 xpu-smi； torch_xmlir 捆绑的 xpu-smi 报告另一组数值（Driver 5.0.21.47 / XPU-RT 5.13.0），以主机工具为准。 `torch_xmlir` 对应发行包名 `xmlir`；`xtorch_ops` 对应发行包名 `XTorch-Ops`；`vllm_fl` 对应发行包名 `vllm-plugin-fl`； `flag_gems` 对应发行包名 `flag-gems`。
+备注：dev 容器 flagos-p800-gems5-vllm0202-dev（非共享镜像正式发布通道）； 尚未登记对应镜像 tag/digest 或构建配方，本锁用于核对已有容器的软件版本， 不作为完整安装清单。中央入口须显式选择 `p800-kunlunxin-gems5`， 独立算子使用各自的本地硬件别名，见 [昆仑芯环境配置](installation.md#kunlunxin)。 flag_gems / vllm-plugin-FL 为 pip 安装，与 4.2 共享镜像的本地路径安装 （/env/FlagGems、/env/xvllm-plugin-FL）不同。框架冒烟模型 /workspace/random-llm-models/llama-3.1-8b-like 在该容器缺失（A1-aten C2 已改用 随机权重 /models/random-qwen3-tiny 跑通，与矩阵/黄金口径分开）， `--require-model` 会失败，framework 矩阵未复测 （见 docs/flaggems5-p800-retest.md）。硬件快照取自主机 xpu-smi； torch_xmlir 捆绑的 xpu-smi 报告另一组数值（Driver 5.0.21.47 / XPU-RT 5.13.0），以主机工具为准。 `torch_xmlir` 对应发行包名 `xmlir`；`xtorch_ops` 对应发行包名 `XTorch-Ops`；`vllm_fl` 对应发行包名 `vllm-plugin-fl`； `flag_gems` 对应发行包名 `flag-gems`。
 
 <a id="p800-kunlunxin"></a>
 ### Kunlunxin P800 FlagGems 4.2 基线共享镜像实测版本

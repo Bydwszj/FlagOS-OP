@@ -46,11 +46,11 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 
 覆盖注意力、私有 math 后端和 embedding，具备跨平台交付证据。
 
-| 算子 | 作用 | 平台 | 关键结论 |
-|---|---|---|---|
-| [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910 · C1） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（mlu590 · C1） · 平头哥（thead-ppu） | 四平台黄金覆盖 397/397。 |
-| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 平头哥（thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
-| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 / ascend910-c2-vllm · C2@ascend910-c2-vllm·complete-pending-review） · 昆仑芯（p800-kunlunxin · C1） · 寒武纪（cambricon · C1） · 平头哥（thead-ppu） | p800/MLU/PPU 三平台交付且逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
+| 算子 | 作用 | 平台 | 证据 | 关键结论 |
+|---|---|---|---|---|
+| [sdpa](sdpa/) | 标准 scaled-dot-product attention 前向路径。 | 华为昇腾（ascend910 C1） · 昆仑芯（p800-kunlunxin C1） · 寒武纪（mlu590 C1） · 平头哥（thead-ppu C1） | C1（ascend910 · p800-kunlunxin · mlu590 · thead-ppu） | 四平台黄金覆盖 397/397。 |
+| [sdpa_math](sdpa_math/) | 私有 SDPA math 后端，同时返回完整概率图。 | 华为昇腾（ascend910 C1 / ascend910-c2-vllm C2·complete-pending-review） · 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2·PASS） | C2（ascend910-c2-vllm · p800-kunlunxin-gems5 · thead-ppu-c2） / C1（ascend910 · p800-kunlunxin · thead-ppu） | 五份实现通过同一组 175 例黄金数据；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md）。 |
+| [embedding](embedding/) | 稠密 embedding 前向和 dense backward。 | 华为昇腾（ascend910 C1 / ascend910-c2-vllm C2·complete-pending-review） · 昆仑芯（p800-kunlunxin C1 / p800-kunlunxin-gems5 C2） · 寒武纪（cambricon C1） · 平头哥（thead-ppu C1 / thead-ppu-c2 C2·PASS） | C2（ascend910-c2-vllm · p800-kunlunxin-gems5 · thead-ppu-c2） / C1（ascend910 · p800-kunlunxin · cambricon · thead-ppu） | 已在三个当前厂商平台交付；MLU/PPU 侧具备逐位覆盖；Ascend910 C2 真实引擎证据已采集、待审阅（complete-pending-review，profile ascend910-c2-vllm，见 reports/c2_ascend910.md），Ascend dev 结果保留为历史实验。 |
 
 ## 基础 ATen 算子
 
@@ -62,42 +62,42 @@ grep -rl my_op . | xargs sed -i 's/my_op/<你的算子名>/g'
 
 覆盖张量布局、存储、广播和类型转换语义，用于验证执行链路和注册链路。
 
-| 算子 | 作用 | 交付路线 | 关键结论 |
-|---|---|---|---|
-| [type_as](type_as/) | 把 tensor 转换到另一个 tensor 的 dtype，并留在原设备。 | A1 · Triton | 黄金 111/111，结果逐位一致。 |
-| [clone](clone/) | 复制 tensor 到独立存储。 | A1 · Triton | 黄金 48/48；op 层测试覆盖包态执行。 |
-| [contiguous](contiguous/) | 返回连续存储；输入本身连续时保持别名。 | A1 · Triton | 黄金 114/114；转置路径使用 2D swizzle 调度。 |
-| [copy_](copy_/) | 写入已有 tensor，支持布局和广播。 | A1 · Triton | 黄金 78/78。 |
+| 算子 | 作用 | 交付路线 | 证据 | 关键结论 |
+|---|---|---|---|---|
+| [type_as](type_as/) | 把 tensor 转换到另一个 tensor 的 dtype，并留在原设备。 | A1 · Triton | C1（cambricon · p800-kunlunxin） | 黄金 111/111，结果逐位一致。 |
+| [clone](clone/) | 复制 tensor 到独立存储。 | A1 · Triton | C1（cambricon · p800-kunlunxin） | 黄金 48/48；op 层测试覆盖包态执行。 |
+| [contiguous](contiguous/) | 返回连续存储；输入本身连续时保持别名。 | A1 · Triton | C2（p800-kunlunxin） / C1（cambricon） | 黄金 114/114；转置路径使用 2D swizzle 调度。 |
+| [copy_](copy_/) | 写入已有 tensor，支持布局和广播。 | A1 · Triton | C1（cambricon · p800-kunlunxin） | 黄金 78/78。 |
 
 ### 随机与 autograd 语义
 
 覆盖随机分支和 detach 语义，用于验证非纯逐元素行为和 autograd 层语义。
 
-| 算子 | 作用 | 交付路线 | 关键结论 |
-|---|---|---|---|
-| [dropout](dropout/) | 验证随机 dropout 语义和统计行为。 | A1 · Triton | 黄金 189/189。 |
-| [detach](detach/) | 返回共享存储的非原地 detach 视图。 | A1 · torch | 黄金 36/36。 |
-| [detach_](detach_/) | 在基础算子族中保留原地 detach 语义。 | experimental · torch | 按设计不可 A1 注册，保持 NotImplementedError。 |
+| 算子 | 作用 | 交付路线 | 证据 | 关键结论 |
+|---|---|---|---|---|
+| [dropout](dropout/) | 验证随机 dropout 语义和统计行为。 | A1 · Triton | C1（cambricon · p800-kunlunxin） | 黄金 189/189。 |
+| [detach](detach/) | 返回共享存储的非原地 detach 视图。 | A1 · torch | C1（cambricon · p800-kunlunxin） | 黄金 36/36。 |
+| [detach_](detach_/) | 在基础算子族中保留原地 detach 语义。 | experimental · torch | C0（cambricon · p800-kunlunxin） | 按设计不可 A1 注册，保持 NotImplementedError。 |
 
 ### 分配与元数据
 
 覆盖分配、stride、未初始化内存和 dtype 提升语义；这类算子以元数据判卷。
 
-| 算子 | 作用 | 交付路线 | 关键结论 |
-|---|---|---|---|
-| [empty_like](empty_like/) | 按另一个 tensor 的元数据分配未初始化 tensor。 | A1 · torch | 元数据黄金 168/168。 |
-| [empty](empty/) | 按 size 分配未初始化 tensor。 | experimental · torch | 不注册，避免与 empty_strided 递归；元数据黄金 48/48。 |
-| [empty_strided](empty_strided/) | 按显式 size 和 stride 分配未初始化 tensor。 | A1 · torch | 元数据黄金 30/30。 |
-| [result_type](result_type/) | 计算两个输入的 PyTorch dtype 提升结果。 | experimental · torch | 纯元数据函数；按设计不可 A1 注册。 |
+| 算子 | 作用 | 交付路线 | 证据 | 关键结论 |
+|---|---|---|---|---|
+| [empty_like](empty_like/) | 按另一个 tensor 的元数据分配未初始化 tensor。 | A1 · torch | C2（p800-kunlunxin） / C1（cambricon） | 元数据黄金 168/168。 |
+| [empty](empty/) | 按 size 分配未初始化 tensor。 | experimental · torch | C0（cambricon · p800-kunlunxin） | 不注册，避免与 empty_strided 递归；元数据黄金 48/48。 |
+| [empty_strided](empty_strided/) | 按显式 size 和 stride 分配未初始化 tensor。 | A1 · torch | C2（p800-kunlunxin） / C1（cambricon） | 元数据黄金 30/30。 |
+| [result_type](result_type/) | 计算两个输入的 PyTorch dtype 提升结果。 | experimental · torch | C0（cambricon · p800-kunlunxin） | 纯元数据函数；按设计不可 A1 注册。 |
 
 ### Host 标量
 
 覆盖单元素 tensor 转 Python 标量的路径，包括公开 item API 底层的私有 ATen 原语。
 
-| 算子 | 作用 | 交付路线 | 关键结论 |
-|---|---|---|---|
-| [item](item/) | 把单元素 tensor 转换为 Python 标量。 | A1 · torch | 黄金 36/36。 |
-| [_local_scalar_dense](_local_scalar_dense/) | 覆盖 item 底层的稠密标量私有原语。 | A1 · torch | 黄金 36/36。 |
+| 算子 | 作用 | 交付路线 | 证据 | 关键结论 |
+|---|---|---|---|---|
+| [item](item/) | 把单元素 tensor 转换为 Python 标量。 | A1 · torch | C1（cambricon · p800-kunlunxin） | 黄金 36/36。 |
+| [_local_scalar_dense](_local_scalar_dense/) | 覆盖 item 底层的稠密标量私有原语。 | A1 · torch | C1（cambricon · p800-kunlunxin） | 黄金 36/36。 |
 
 ## 平台注册契约
 
@@ -151,6 +151,10 @@ register_a1(
 - **多平台算子**必须维护 `PLATFORM.md`；涉及平台合并流程时维护 `MERGE.md`。
 - **平台结论限定范围**：dtype、shape、dispatch key、运行时版本和
   fallback 边界写在同一份证据链里。
+- **证据等级按 profile 记录**：`platforms.<family>.evidence` 是
+  逐 profile 记录列表（`- profile: <profile>` + level/basis/report
+  /status），顶层 `evidence` 只是这些记录的派生汇总；单个 family
+  下多个 profile 不共享未区分的等级。
 - **包态导入**统一使用 `from ops.<operator> import register_a1`；脚本态
   仅作为单算子目录内运行的兼容模式。
 - CI 的 `ops-packaging` 是 CPU 包入口扫描；`ops/test_packaging.py` 是

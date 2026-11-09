@@ -12,6 +12,9 @@ family: kunlunxin
 scope:
   - ops/sdpa / sdpa_math / embedding 在 FlagGems 5.0 栈的兼容性复测
   - "vllm-plugin-FL 0.2.0 dispatch 行为（known-issues #20 / #23）"
+  - "A1-aten 真实 vLLM C2（embedding/sdpa_math，2026-10-29，随机权重
+    /models/random-qwen3-tiny，issue #39；证据见 tests/framework_level/README.md
+    与 tests/framework_level/evidence/）"
   - 框架级冒烟（冒烟模型缺失，framework 矩阵未复测，见复测页 §5.5）
 hardware:
   model: P800 OAM
@@ -41,7 +44,8 @@ notes: |-
   [昆仑芯环境配置](installation.md#kunlunxin)。
   flag_gems / vllm-plugin-FL 为 pip 安装，与 4.2 共享镜像的本地路径安装
   （/env/FlagGems、/env/xvllm-plugin-FL）不同。框架冒烟模型
-  /workspace/random-llm-models/llama-3.1-8b-like 在该容器缺失，
+  /workspace/random-llm-models/llama-3.1-8b-like 在该容器缺失（A1-aten C2 已改用
+  随机权重 /models/random-qwen3-tiny 跑通，与矩阵/黄金口径分开），
   `--require-model` 会失败，framework 矩阵未复测
   （见 docs/flaggems5-p800-retest.md）。硬件快照取自主机 xpu-smi；
   torch_xmlir 捆绑的 xpu-smi 报告另一组数值（Driver 5.0.21.47 /

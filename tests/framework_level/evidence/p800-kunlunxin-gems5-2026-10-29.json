@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "engine": "vllm",
+  "profile": "p800-kunlunxin-gems5",
+  "model": "/models/random-qwen3-tiny",
+  "output_match": true,
+  "counts": {
+    "embedding": 19,
+    "sdpa_math": 9
+  },
+  "total_calls": 28,
+  "sdpa": {
+    "consumer": "vllm_prefill_attention",
+    "calls": 8,
+    "fallbacks": 8,
+    "fallback_reasons": [
+      "profiling_fake_meta"
+    ],
+    "prob_sample": {
+      "type": "consume",
+      "req": 0,
+      "qlen": 6,
+      "heads": 4,
+      "kv_heads": 2,
+      "head_size": 64,
+      "is_causal": true,
+      "probs_shape": [
+        1,
+        4,
+        6,
+        6
+      ],
+      "probs_rowsum_max_dev": 0.0098876953125,
+      "probs_diag_mean": 0.4414825439453125,
+      "probs_entropy_mean": 0.8220794200897217
+    },
+    "grad": {
+      "ok": true,
+      "dtype": "bf16",
+      "ref": "cpu_float64_native_math",
+      "out_max_abs": 0.007622,
+      "out_max_rel": 1.70466,
+      "probs_max_abs": 0.009923,
+      "probs_max_rel": 0.028599,
+      "dq_max_abs": 0.007492,
+      "dq_max_rel": 0.004903,
+      "dk_max_abs": 0.011343,
+      "dk_max_rel": 0.003875,
+      "dv_max_abs": 0.016317,
+      "dv_max_rel": 0.002909
+    }
+  },
+  "latency_s": {
+    "base": 22.9891,
+    "inj": 26.5759
+  },
+  "captured_at": "2026-10-29"
+}

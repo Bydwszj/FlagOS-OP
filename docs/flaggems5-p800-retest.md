@@ -19,7 +19,7 @@
 | 对照基线 | 仓库内 4.2.1rc0 环境锁的报告 / 黄金 / `perf/baselines` |
 | 硬件 | Kunlunxin P800 OAM ×8（测试用空闲卡，`xpu-smi` 确认） |
 | 环境登记 | [`p800-kunlunxin-gems5`](../configs/devices/p800-kunlunxin-gems5.yaml) profile + [环境锁](../configs/env/p800-kunlunxin-gems5.lock.yaml)（4.2 基线锁 `p800-kunlunxin` 保留） |
-| 总结论 | **已完成的 kernel/A1/mini-consumer 证据与 4.2 基线一致；推理/生成性能一致；训练收益收窄（xtorch_ops/plugin 变化，非 FlagGems）；#20/#21 已修、#22 样例侧规避（根因未修）、#23 仅记录（A2 BLOCKED）、framework 矩阵未复测（§5.5）** |
+| 总结论 | **已完成的 kernel/A1/mini-consumer 证据与 4.2 基线一致；推理/生成性能一致；训练收益收窄（xtorch_ops/plugin 变化，非 FlagGems）；#20/#21 已修、#22 样例侧规避（根因未修）、#23 仅记录（A2 BLOCKED）、framework 矩阵未复测（§5.5）；A1-aten 真实 vLLM C2（embedding/sdpa_math）已用随机权重 random-qwen3-tiny 补齐（issue #39，见 §5.5 备注）** |
 
 ## 1. 环境对照
 
@@ -198,6 +198,17 @@ vLLM 启动时 `HFValidationError`，本轮无法复测。仓内仅有
 llama-like 模型生成，**不能替代**。可用 `FLAGOS_MODEL_PATH` 换模型路径，
 但黄金需在同模型上重新生成后再比对。
 
+**2026-10-29 备注（C2 已部分补齐，黄金矩阵缺口不变）**：issue #39 要求的
+A1-aten 真实 vLLM C2 证据（`embedding` + `sdpa_math`）已用
+`FLAGOS_MODEL_PATH=/models/random-qwen3-tiny` 在本容器跑通——该路径走
+`tests/framework_level/test_a1_aten_ops.py` 的专用 runner 口径
+（`max_model_len=128`、TP=1、不做黄金比对），因此不受上述 profile
+`engine_args` / llama-like 黄金约束；命令、命中计数、概率图与梯度证据见
+[框架级 README「P800 5.0 真实 vLLM C2 实测」](../tests/framework_level/README.md)
+与 [evidence 存档](../tests/framework_level/evidence/)。本页 §2/§5.5 所指的
+**框架矩阵 + 黄金**（`run.py --route … --level framework`）仍待模型与
+黄金回填，两项口径互不替代。
+
 当前也未入库 `golden/p800-kunlunxin-gems5_golden.json`；A1/B framework
 按 profile 名查找该文件，缺失时历史黄金检查会跳过。因此补回模型后还需
 建立并审阅 5.0 框架黄金，完成相应验证后再回填本页。操作入口见
@@ -234,6 +245,14 @@ python3 script/e2e_flagos.py --device cuda:0 --dtype bfloat16
 # 单测与矩阵
 cd ../.. && python3 -m pytest tests/unit -q
 python3 run.py --consistency --device p800-kunlunxin-gems5
+
+# A1-aten 真实 vLLM C2（issue #39；随机权重 tiny 模型，runner 口径不比黄金）
+# 卡号以 xpu-smi 为准；卡 5 内核态挂起勿用（见框架级 README 限制）
+FLAGOS_DEVICE=p800-kunlunxin-gems5 \
+FLAGOS_MODEL_PATH=/models/random-qwen3-tiny \
+FLAGOS_A1_OPS=embedding,sdpa_math \
+USE_FLAGGEMS=0 CUDA_VISIBLE_DEVICES=0,3 \
+python -m pytest tests/framework_level/test_a1_aten_ops.py -q -s
 
 # framework 矩阵（待 §5.5 冒烟模型就绪后执行；模型缺失时 vLLM 启动即 HFValidationError）
 # 运行前核对所用 profile 的 device.visible_devices；该字段会覆盖上面的 5,6
@@ -286,11 +305,12 @@ framework 矩阵待 §5.5 冒烟模型就绪后按本清单执行（复测当日
 | A2 dispatch（插件路线） | **BLOCKED**（#23，本轮仅记录） |
 | 仓库样例 / 测试 / 脚本 | #20/#21 已修；#22 本仓库已规避（FlagGems 根因未修）；#23 仅记录 |
 | 框架层矩阵 | 未复测（冒烟模型缺口，§5.5） |
+| 真实 vLLM C2（A1-aten embedding/sdpa_math） | **已补齐**（2026-10-29，random-qwen3-tiny，issue #39；与矩阵/黄金口径分开） |
 
 **结论仅适用于 §2–§4 已完成的验证范围**：kernel、A1 与 mini-consumer
 证据在 FlagGems 5.0 栈上与 4.2 基线一致，可继续作为这些范围内 P800
 算子开发的参考；A2 插件路线仍为 BLOCKED（#23），framework 矩阵因冒烟
-模型缺失尚未验证（§5.5）——两项回填前不扩大基线声明。性能基线建议在
+模型缺失尚未验证（§5.5）——两项回填前不扩大基线声明；A1-aten 的真实 vLLM C2（embedding/sdpa_math）已于 2026-10-29 单独补齐（issue #39），只覆盖该两个算子的 C2 判定、不扩大到矩阵/黄金声明。性能基线建议在
 锁定 xtorch_ops 与空闲卡条件下重标。
 
 ---

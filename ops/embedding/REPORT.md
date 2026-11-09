@@ -68,6 +68,7 @@ gather，行采集是厂商库强项，**生产委托是两平台一致的工程
 | 性能（p800） | `script/bench_perf.py` | 大 shape native parity；Triton 显著慢 |
 | dispatch（p800） | `script/bench_dispatch.py` | **作废，待复测**（旧脚本未持有 `torch.library.Library`，测得未注册状态） |
 | gatherFIX 对照（p800） | `script/probe_gatherfix.py` | 正确性 0 error；P800 特化比 native 慢 10.9-177.9x |
+| 真实 vLLM C2（p800 5.0，2026-10-29） | `tests/framework_level/test_a1_aten_ops.py` | ✅ 1 passed；真实前向命中 19 次 · 注入前后 token 逐位一致（random-qwen3-tiny，issue #39，4.2 侧待复验） | [evidence json](../../tests/framework_level/evidence/p800-kunlunxin-gems5-2026-10-29.json) |
 
 | 平台 / 级别 | 文件 | 状态 | 说明 |
 |---|---|---|---|

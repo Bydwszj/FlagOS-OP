@@ -74,3 +74,56 @@ workspace 内使用，不占用任何其他人的容器。
   FlagGems 时 C2 不通过。
 - 更大的 Qwen3-8B 在本栈 EngineCore 初始化阶段挂起（GPU 100%、显存仅
   166MiB），因此当前 C2 证据使用 0.5B 现成模型；8B 需要另查栈/模型兼容性。
+
+## P800 5.0（gems5）真实 vLLM C2 实测（2026-10-29）
+
+在开发容器 `flagos-p800-gems5-vllm0202-dev`（vllm 0.20.2+empty ·
+vllm-plugin-fl 0.2.0+g38e7dbc · torch_xmlir 1.0.0.1 · xtorch_ops
+0.1.2935+50a5d6a4 · FlagGems 5.0.0）上，用随机权重 Qwen3 小模型
+`/models/random-qwen3-tiny`（4L · hidden 256 · head 64 · 4Q/2KV · vocab
+151669）补齐 issue #39 的 embedding 与 sdpa_math C2 证据（与 4.2 段的
+Qwen2.5-0.5B 结果分开记录，互不复用）：
+
+```bash
+FLAGOS_DEVICE=p800-kunlunxin-gems5 \
+FLAGOS_MODEL_PATH=/models/random-qwen3-tiny \
+FLAGOS_A1_OPS=embedding,sdpa_math \
+USE_FLAGGEMS=0 \
+CUDA_VISIBLE_DEVICES=0,3 \
+python -m pytest tests/framework_level/test_a1_aten_ops.py -q -s
+```
+
+结果：`1 passed in 219.68s`；真实 vLLM EngineCore 基线/注入双跑，
+命中 `embedding=19`、`sdpa_math=9`（total=28），注入前后输出 token ids
+逐位一致；生成延迟 base 22.99s / inj 26.58s（注入侧含逐请求私有 math
+与全量 P 物化，属证据口径非性能口径）。完整证据存档：
+[evidence/p800-kunlunxin-gems5-2026-10-29.json](evidence/p800-kunlunxin-gems5-2026-10-29.json)。
+
+sdpa_math 消费机制（issue #39「等价目标消费者」口径）：
+
+- vLLM 0.20 的 kunlunxin vendor `prefill_attention` 不经过 `F.sdpa`，
+  真实文本模型前向里没有任何原生 aten SDPA 消费点。
+- 注入侧（`injection/a1_aten_ops.py`，环境变量 `A1_SDPA_CONSUMER=prefill`
+  启用）把 `KunlunxinAttentionBackendImpl.context_forward` 的无前缀缓存
+  分支改为逐请求调用 A1 的
+  `torch.ops.aten._scaled_dot_product_attention_math`，双输出 `(O, P)`
+  的 `O` 直接写回模型输出缓冲继续参与前向；decode、前缀缓存命中与
+  profiling fake-meta（`slot_mapping=None`）分支保持 vendor 原路径。
+- 概率图证据：本次真实 prompt（6 token）`probs_shape=[1,4,6,6]`、
+  行和最大偏差 0.0099、对角均值 0.441、熵均值 0.822；引擎内每次消费
+  追加 JSONL 到 `A1_SDPA_EVIDENCE_FILE`。
+- 梯度证据：注入运行结束后在同进程做 bf16 前向 + 双输出反向
+  （`dout`/`dprobs` 全 1，覆盖 dP 消费者路径），对照 CPU fp64 原生
+  math：out/probs/dq/dk/dv `max_abs ≤ 0.016`、`max_rel ≤ 0.029`
+  （`sdpa_grad.ok=true`）。
+
+限制：
+
+- 单 chunk prompt（长度 ≤ `max_num_batched_tokens`）；多 chunk 前缀
+  与前缀缓存命中会记录 `fallback`，不计入消费证据。
+- profiling fake-meta 的 16k dummy 调用不进消费统计（否则 16384² P
+  会污染概率图样本）。
+- 本用例沿用 runner 的 TP=1 单引擎口径（与 4.2 段一致）；profile 的
+  TP=2 / framework 参数不在该路径。
+- 卡 5 在本容器内核态挂起（异常中止的引擎进程残留所致），本实测改用
+  空闲卡 0/3；卡 5 未恢复前不要选它跑引擎。

@@ -336,6 +336,32 @@ impl_id + 双张量** `fn(obj, x, gate)` 注册:
 DEFAULT=150）；② `fn` 改 packed 单张量协议；③ 上游允许插件覆盖同名
 内置注册；④ A2 演示改用内置未占用的算子。
 
+### 24. FlagGems 4.2 P800 `gather` 在 vLLM 采样阶段报 err_code 1
+4.2 栈开 FlagGems 跑真实 vLLM 生成时，采样阶段
+`xpuLaunchKernel ... Operation not permitted (err_code: 1)`，C2 直接不过；
+`USE_FLAGGEMS=0`（走 torch/vendor 兜底）后通过（4.2 与 5.0 两轮 C2 实测均
+用该口径）。同硬件的 `gatherFIX` 探针
+（`ops/embedding/script/probe_gatherfix.py`）正确性 0 error、但比 native
+慢 10.9-177.9x，尚未合入默认路径。5.0 栈开 FlagGems 的 C2 未复测
+（本轮同口径 `USE_FLAGGEMS=0`）——FlagGems 侧修复验证前，C2 建议保持
+该开关并在此记录。
+
+### 25. Qwen3-8B 在 P800 4.2 栈 EngineCore 初始化阶段挂起
+vllm 0.13.0 + vllm_fl 0.1.0（4.2 共享镜像）加载 Qwen3-8B 时 EngineCore
+初始化挂死：GPU 100%、显存仅占 166MiB，无 traceback（4.2 C2 实测记录，
+见[框架级 README](../tests/framework_level/README.md)）。规避: 4.2 侧 C2
+改用现成 Qwen2.5-0.5B。5.0 栈（vllm 0.20.2）未复测 8B；5.0 侧 C2 用
+随机权重 random-qwen3-tiny（4L）跑通。根因未查（疑与该栈 8B 权重/配置
+路径相关），8B 级验证前需先复现定位。
+
+### 26. P800 bf16 下 `copy_` 与 `type_as`/`Tensor.to` 的 A1 注入递归
+P800 bf16 兜底路径会经 `aten::type_as` / `Tensor.to` 转换，而两者内部
+重新进入已注册的 `copy_`，`FLAGOS_A1_OPS` 同时含 `copy_` 与
+`type_as` 时形成 `copy_ ↔ type_as/to` 无限递归（4.2 C2 实测）。规避:
+`copy_` 从 `FLAGOS_A1_OPS` 排除（框架级默认列表不含；需要时改用不经过
+`copy_` 的 cast）。5.0 侧本轮未注入 `copy_`，未触发。设计层面
+`copy_` 的可注入边界见其 op 报告。
+
 ## 通用检测方法
 
 | 问题类型 | 检测工具 |

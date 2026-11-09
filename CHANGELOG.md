@@ -3,6 +3,45 @@
 ## [Unreleased]
 
 ### Added
+- **逐 profile 证据记录公共模块（issue #41 整改，PR #46）**：新增
+  `scripts/evidence_schema.py`，把「等级 / 实验判定 verdict / 维护者审阅
+  状态 review」三轴语义与路径解析、`redecide` 派生更正核验集中在一处，
+  `evidence_check.py` 与 `build_ops_index.py` 共用同一套口径；
+  `platforms.<family>.evidence` 统一为**逐 profile 记录列表**（旧单条
+  dict 兼容读取，含 `profiles` 键的嵌套形态停用），记录 `status` 与报告
+  acceptance 字段冲突、记录审阅状态未知词、`redecide` 源 SHA256/来源/
+  commit 不符均单独报错；`FAIL`、缺判定、`collect-only` 一律不能支撑
+  锁 C2 声明，`complete-pending-review` 记为「verdict 通过 + 待审阅」
+- **C1/C2 证据门禁（issue #41）**：新增 `scripts/evidence_check.py`
+  （CI `ops-catalog` job）——校验 `ops/catalog.yaml` 每算子
+  `evidence: C0|C1|C2` 声明、C1/C2 必须有 `test/framework_level.py`、
+  C2 必须锁 `evidence_basis` + 仓库内 `evidence_paths`（路径不存在即
+  失败）、平台状态三方一致（catalog ↔ `docs/operator-catalog.md` ↔
+  `ops/README.md`）与 `updated`/环境锁日期不晚于当天；16 个算子全部
+  回填（C2×5：`sdpa_math`/`embedding`（P800 5.0 真实 vLLM，#39）、
+  `empty_strided`/`empty_like`/`contiguous`（P800 4.2 真实 vLLM）；
+  其余 C1×11）；`ops/README.md` 生成表新增「证据」列；CI 增
+  `git diff --check` 空白字符检查；PR 模板增证据回填勾选项；配套
+  8 项单测（`tests/unit/test_evidence_check.py`）
+- **P800 5.0 真实 vLLM C2 证据（issue #39，2026-10-29）**：
+  `p800-kunlunxin-gems5` profile 用随机权重 `/models/random-qwen3-tiny`
+  跑通 `tests/framework_level/test_a1_aten_ops.py`（1 passed）：
+  `embedding` 真实前向命中 19、`sdpa_math` 命中 9（真实 prefill 消费 8），
+  注入前后输出 token 逐位一致；sdpa_math 走「等价目标消费者」——注入侧
+  把 `KunlunxinAttentionBackendImpl.context_forward` 无前缀缓存分支改接
+  A1 `torch.ops.aten._scaled_dot_product_attention_math`（双输出 O+P 喂回
+  模型；decode/前缀缓存/profiling fake-meta 保持 vendor），概率图统计
+  JSONL（行和偏差 9.9e-3）与同进程 bf16 双输出反向梯度 probe（对 CPU
+  fp64 参照 max_abs≤0.016）一并存档
+  `tests/framework_level/evidence/`；框架级 README 增 5.0 C2 小节，
+  复测页 §5.5/§6/§7 回填，`p800-kunlunxin-gems5.lock.yaml` scope 与
+  `docs/environments.md` 重生成，embedding/sdpa_math REPORT 增 C2 行。
+  同时修复多算子注入的两处隔离缺陷：`register_all` 计数文件变量遮蔽
+  （导致后续算子不再注册）与跨算子裸模块 `reference` 缓存污染（导致
+  `sdpa_math` 加载失败）
+- **P800 4.2 栈三项遗留记入已知问题（#24-#26）**：FlagGems 4.2 `gather`
+  采样阶段 err_code 1（`USE_FLAGGEMS=0` 规避）、Qwen3-8B EngineCore
+  初始化挂起、`copy_ ↔ type_as/to` A1 注入递归（`copy_` 排除）
 - **catalog 证据等级字段（issue #41）**：`ops/catalog.yaml` 的
   `platforms.<family>.evidence` 支持 `level`（C0/C1/C2/C2-routing-boundary）
   与可选 `report`；`scripts/build_ops_index.py` 校验非法 level、C2 缺
@@ -15,8 +54,9 @@
   （`npu_fusion_attention` 路由，known-issues #19）→ 标记
   `C2-routing-boundary`，证据
   [reports/c2_ascend910.md](ops/sdpa_math/reports/c2_ascend910.md)；
-  `injection/a1_aten_ops` 增加 `FLAGOS_C2_COUNT_DIR` pid 分片计数
+   `injection/a1_aten_ops` 增加 `FLAGOS_C2_COUNT_DIR` pid 分片计数
 - **13 个基础 ATen 算子接入 p800-kunlunxin（2026-10-22）**：
+
   `clone/contiguous/copy_/detach/detach_/dropout/empty/empty_like/
   empty_strided/item/_local_scalar_dense/result_type/type_as` 完成
   kernel/op/应用等价三层验证、黄金与性能基线；注册 key 为
@@ -54,6 +94,32 @@
   A2 插件与内置 backend impl_id 冲突）与 #5 的 XPU1 Xid 补注
 
 ### Changed
+- **证据门禁预审两项阻断修复（issue #41 提交前预审）**：
+  `scripts/evidence_check.py` 锁 C2 支撑改「有效且通过 + 同源关联」
+  ——支撑 JSON 必须可解析、声明本锁 profile、`status`/`ok` 为通过态
+  （挡 `status=FAIL` / 缺 status 假阳性背书），且与该 profile 的 C2
+  记录 `report`/`consumer` 同源（等于记录 report、列入 evidence_paths
+  或 consumer 一致）；锁证据 JSON 损坏/缺 profile 单独报错、不再无声
+  跳过且不能成为支撑；REPORT 成功行所引结构化 JSON 若声明 profile
+  必须与行内范围一致（未声明 profile 的存量文件登记在
+  `docs/operator-catalog.md` 已知未覆盖范围）；配套阴性/阳性单测
+  （`tests/unit/test_evidence_check.py` 51 项）
+- **证据等级按 profile 记录 + 锁交叉校验收紧（issue #41 审阅落实）**：
+  `ops/catalog.yaml` 以「算子 + profile」为证据记录最小单位
+  （`platforms.<family>.evidence` 逐 profile 记录列表，每条记
+  profile/level/basis/report/consumer/status，顶层 `evidence` 改为派生
+  汇总并由门禁校验），
+  `ops/README.md` 按 profile 展示等级（平台列/证据列均带 profile 明细）；
+  `scripts/evidence_check.py` 新增：锁 `scope` 等级改与**本锁 profile**
+  记录比较（P800 报告不能再给 PPU 的 C2 声明背书，另一环境 C1 也不再
+  被全局 C2 误杀）、结构化 JSON 证据必须声明同 profile 且带通过状态、
+  证据路径统一解析（拒绝对路径/`..` 越界/目录/仓库外 symlink）、
+  REPORT profile 改完整 token 匹配（`demo-10` 不算 `demo-1`，空 profile
+  集不再跳过）；`empty`/`detach_`/`result_type` 按真实消费证据回填为
+  C0（framework 脚本只跑原生 torch 前向、`output_match` 固定返回，
+  不构成 C1），`docs/operator-catalog.md` 同步 C0/C1/C2 口径与未覆盖
+  范围登记；配套阴性/阳性单测（`tests/unit/test_evidence_check.py`
+  43 项 = 原 16 + 新 27）
 - **known-issues #13 / issue #30 跟进（2026-10-27）**: 补 GELU
   `approximate="tanh"` 链接失败的组件归属与修复状态——4.2.1rc0 根因为
   xtriton XPU libdevice 表 fp32 tanh 占位符 `Unsupported`（报错另会被

@@ -33,3 +33,17 @@ def test_a1_aten_real_vllm():
     assert r["output_match"], f"注入前后输出不一致: {r}"
     assert r["total_calls"] > 0, f"没有 A1 aten 算子被真实前向消费: {r}"
     print(f"[a1-aten] {r['counts']} total={r['total_calls']}")
+    ops = [o.strip() for o in
+           os.environ.get("FLAGOS_A1_OPS", "").split(",") if o.strip()]
+    if "sdpa_math" in ops:
+        sdpa = r.get("sdpa") or {}
+        assert r["counts"].get("sdpa_math", 0) > 0, \
+            f"sdpa_math 未被真实前向消费: {r}"
+        assert sdpa.get("calls", 0) > 0, \
+            f"sdpa_math 等价消费者(prefill)未命中: {sdpa}"
+        assert sdpa.get("prob_sample", {}).get("probs_rowsum_max_dev", 1) < 1e-2, \
+            f"概率图行和偏差异常: {sdpa.get('prob_sample')}"
+        grad = sdpa.get("grad") or {}
+        assert grad.get("ok"), f"sdpa_math 梯度 probe 失败: {grad}"
+        print(f"[a1-aten] sdpa calls={sdpa['calls']} "
+              f"prob={sdpa['prob_sample']} grad={grad}")

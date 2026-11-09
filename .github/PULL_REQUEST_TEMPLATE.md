@@ -10,6 +10,7 @@ PR 自查清单（2026-10-07 审计后新增——详见 templates/operator/READ
 - [ ] 黄金绿: goldendata/ + script/check_accuracy.py
 - [ ] 包化回归绿: `python3 ops/test_packaging.py`（全算子导入扫描）
 - [ ] 多平台变更时: PLATFORM.md / MERGE.md 已同步
+- [ ] 证据等级同步: `ops/catalog.yaml` `evidence` 已回填（C1 需 `test/framework_level.py`；C2 需 `evidence_basis` + `evidence_paths` 且路径存在）；`python3 scripts/evidence_check.py` 通过
 - [ ] 署名一致: `wt-YYYY-MM-DD-fix` + `# wt <邮箱>`，commit 作者相同
 
 ## 说明
